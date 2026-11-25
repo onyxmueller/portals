@@ -1,0 +1,9 @@
+{
+  "appId": "net.onyxmueller.portals",
+  "appName": "Portals",
+  "webDir": "public",
+  "backgroundColor": "#14161c",
+  "ios": {
+    "contentInset": "never"
+  }
+}

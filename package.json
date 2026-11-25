@@ -6,12 +6,19 @@
   "scripts": {
     "start": "node server.js",
     "check": "node scripts/check-relay.mjs",
-    "latency": "node scripts/latency.mjs"
+    "latency": "node scripts/latency.mjs",
+    "ios": "cap sync ios && cap open ios",
+    "android": "cap sync android && cap open android"
   },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.2",
     "qrcode-terminal": "^0.12.0"
   }
 }

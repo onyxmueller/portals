@@ -15,7 +15,7 @@
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); pointer-events: none; }
   #hud > * { pointer-events: auto; }
   #status { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
-  #dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: #555; }
+  #dot { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; border-radius: 50%; margin-right: 6px; background: #555; }
   button { font: inherit; color: inherit; background: #2b2f3a; border: 1px solid #3d4250; border-radius: 10px;
     padding: 8px 12px; min-height: 40px; }
   button:active { background: #3d4250; }
@@ -63,6 +63,18 @@
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+// ---------- native app ----------
+// Inside the iOS/Android app (Capacitor) the page is bundled with the app, so there is
+// no server behind it: it talks to the live relay instead. In a browser it talks to
+// whatever server served the page.
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const RELAY = 'wss://portals.onyxmueller.net';
+const Haptics = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.Haptics : null;
+function buzz(style) { // 'LIGHT' when sending, 'MEDIUM' when receiving
+  if (Haptics) Haptics.impact({ style }).catch(() => {});
+  else if (navigator.vibrate) navigator.vibrate(style === 'LIGHT' ? 8 : 20);
+}
+
 // ---------- state ----------
 const cfg = { fling: 350, fric: 1.6 };           // px/s outward speed needed to cross an edge; friction (1/s)
 const R = 34;                                    // item radius, CSS px
@@ -73,6 +85,7 @@ let ws = null, pingMs = null, pings = [];      // pings: last 30 round trips, ms
 let items = [];                                  // { id, emoji, x, y, vx, vy, state: 'in'|'entering'|'leaving', age, held }
 let flashes = [];                                // arrival/departure glows { x, y, color, age }
 let seeded = false;
+let myColor = null, bannerAge = 99;             // big "You are Coral" banner, shown for a few seconds
 
 // ---------- canvas ----------
 const cv = $('c'), ctx = cv.getContext('2d');
@@ -156,6 +169,7 @@ function tryThrow(it, edge) {
   it.state = 'leaving'; it.age = 0;
   flashes.push({ x: it.x, y: it.y, color: p.color, age: 0 });
   blip(520, 880);
+  buzz('LIGHT');
   return true;
 }
 
@@ -178,7 +192,7 @@ function onThrow(m) {
   items.push(it);
   flashes.push({ x: clamp(it.x, 0, W), y: clamp(it.y, 0, H), color: from ? from.color : '#fff', age: 0 });
   blip(880, 440);
-  if (navigator.vibrate) navigator.vibrate(20);
+  buzz('MEDIUM');
 }
 
 // ---------- physics ----------
@@ -223,6 +237,7 @@ function step(dt) {
 
   items = items.filter((it) => !(it.state === 'leaving' &&
     (it.age > 1 || it.x < -2 * R || it.x > W + 2 * R || it.y < -2 * R || it.y > H + 2 * R)));
+  bannerAge += dt;
   for (const f of flashes) f.age += dt;
   flashes = flashes.filter((f) => f.age < 0.4);
 }
@@ -291,12 +306,12 @@ function blip(f0, f1) {
 // ---------- drawing ----------
 function edgeLabel(text, x, y, rot, color) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-  ctx.fillStyle = color; ctx.font = '600 13px system-ui, sans-serif';
+  ctx.fillStyle = color; ctx.font = '700 15px system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, 0, 0); ctx.restore();
 }
 function strip(t0, t1, p) { // draw a coloured band along the edge strip from t0 to t1
-  const T = 8, gap = 5;
+  const T = 12, gap = 5;
   const cuts = [t0, H, H + W, t1].filter((t) => t >= t0 && t <= t1).sort((a, b) => a - b);
   ctx.fillStyle = p.color;
   for (let i = 0; i < cuts.length - 1; i++) {
@@ -308,11 +323,26 @@ function strip(t0, t1, p) { // draw a coloured band along the edge strip from t0
     else ctx.fillRect(x, 0, Math.abs(pb.x - pa.x), T);
   }
   const m = ptAt((t0 + t1) / 2);
-  edgeLabel(p.name, m.x - m.nx * 24, m.y - m.ny * 24, m.nx < 0 ? -Math.PI / 2 : m.nx > 0 ? Math.PI / 2 : 0, p.color);
+  edgeLabel(`to ${p.name}`, m.x - m.nx * 28, m.y - m.ny * 28, m.nx < 0 ? -Math.PI / 2 : m.nx > 0 ? Math.PI / 2 : 0, p.color);
 }
 function draw() {
   ctx.clearRect(0, 0, W, H);
   const self = mySelf(), o = others();
+
+  // The whole screen is tinted with my own colour, so other players can match
+  // the strip on their screen to this phone.
+  if (self) {
+    ctx.globalAlpha = 0.16; ctx.fillStyle = self.color; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    const k = bannerAge < 3 ? 1 : Math.max(0, 1 - (bannerAge - 3));
+    if (k > 0) {
+      ctx.globalAlpha = k; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e9ecef'; ctx.font = '500 20px system-ui, sans-serif';
+      ctx.fillText('You are', W / 2, H * 0.36);
+      ctx.fillStyle = self.color; ctx.font = '800 64px system-ui, sans-serif';
+      ctx.fillText(self.name, W / 2, H * 0.36 + 52);
+      ctx.globalAlpha = 1;
+    }
+  }
 
   if (o.length) {
     if (mode === 'neighbors') {
@@ -324,9 +354,8 @@ function draw() {
   } else {
     ctx.fillStyle = '#868e96'; ctx.font = '15px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('Waiting for another device to join…', W / 2, H * 0.18);
-    ctx.fillText(location.host, W / 2, H * 0.18 + 24);
+    ctx.fillText(NATIVE ? 'portals.onyxmueller.net' : location.host, W / 2, H * 0.18 + 24);
   }
-  if (self) { ctx.fillStyle = self.color; ctx.globalAlpha = 0.5; ctx.fillRect(0, H - 3, W, 3); ctx.globalAlpha = 1; }
 
   for (const f of flashes) {
     const k = f.age / 0.4;
@@ -356,8 +385,8 @@ requestAnimationFrame(frame);
 // ---------- network ----------
 function connect() {
   roomName = new URLSearchParams(location.search).get('room') || 'main';
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/?room=${encodeURIComponent(roomName)}`);
+  const base = NATIVE ? RELAY : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+  ws = new WebSocket(`${base}/?room=${encodeURIComponent(roomName)}`);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.t === 'hello') {
@@ -381,9 +410,10 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 // ---------- UI ----------
 function ui() {
   const self = mySelf();
+  if (self && self.color !== myColor) { myColor = self.color; bannerAge = 0; }
   $('dot').style.background = self ? self.color : '#555';
   $('statusText').textContent = self
-    ? `${self.name} · ${players.length} in "${roomName}"${pingMs != null ? ` · ${pingMs}ms (worst ${Math.max(...pings)})` : ''}`
+    ? `You are ${self.name} · ${players.length} in "${roomName}"${pingMs != null ? ` · ${pingMs}ms (worst ${Math.max(...pings)})` : ''}`
     : 'Connecting…';
   $('mNeighbors').classList.toggle('on', mode === 'neighbors');
   $('mPortals').classList.toggle('on', mode === 'portals');

@@ -24,6 +24,19 @@ server in milliseconds, and the worst of the last 30 seconds.
 
 It prints an address and a QR code for phones on the same Wi-Fi.
 
+## Native apps (iOS and Android)
+
+The same page is wrapped with Capacitor into real apps (`ios/` and `android/`). The Android app id is
+`net.onyxmueller.portals`; the iOS one is `com.softronyx.portals`, signed with the Softronyx team. The page is bundled inside the app and talks to the live relay at
+`wss://portals.onyxmueller.net`, so the apps work on any network. They are locked to portrait and
+use the phone's real haptics.
+
+    npm run ios        # copy the page into the iOS app and open Xcode
+    npm run android    # copy the page into the Android app and open Android Studio
+
+Then press Run. After changing `public/index.html`, run the command again (or `npx cap sync`) so the apps get the
+new page. Building needs Xcode, and Android Studio (its bundled Java is new enough; Java 17 is not).
+
 ## Check and measure
 
     npm run check                                          # two pretend players join and throw
