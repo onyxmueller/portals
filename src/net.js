@@ -72,6 +72,20 @@ function leftCrew() {
 }
 export function leaveCrew() { send({ t: 'leave' }); leftCrew(); }
 
+// A browser tab left open keeps running whatever version it loaded. When the server says it
+// is on a different version, reload to pick up the new one, but never in the middle of a game.
+// The crew and room are remembered, so the tab comes straight back to where it was.
+// The phone apps carry their own copy of the game, so this doesn't apply to them.
+let staleFor = null; // the server version we're out of date against, if any
+function reloadIfStale() {
+  if (!staleFor || state.game.phase === 'run') return;
+  let already = null;
+  try { already = sessionStorage.getItem('portals.reloadedFor'); } catch {}
+  if (already === staleFor) return; // tried that already; don't reload in a loop
+  try { sessionStorage.setItem('portals.reloadedFor', staleFor); } catch { return; }
+  location.reload();
+}
+
 function serverAddress() {
   if (NATIVE) return RELAY;
   // `npm run dev` serves the page from Vite, with the game server next to it on port 3000.
@@ -90,7 +104,12 @@ export function connect() {
   };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.t === 'joined') {
+    if (m.t === 'hello') {
+      const mine = __BUILD__;
+      if (!NATIVE && mine !== 'dev' && m.version !== 'dev' && m.version !== mine) staleFor = m.version;
+      reloadIfStale();
+    }
+    else if (m.t === 'joined') {
       state.me = m.id; state.crew = m.code; state.game = { ...freshGame(), phase: m.phase };
       remember({ code: m.code, token: m.token }); wanted = null;
       net.emit('joined');
@@ -99,7 +118,7 @@ export function connect() {
       state.players = m.players; state.mode = m.mode; state.captain = m.captain;
       net.emit('room');
     }
-    else if (m.t === 'game') { state.game = m; net.emit('game', m); }
+    else if (m.t === 'game') { state.game = m; net.emit('game', m); reloadIfStale(); }
     else if (m.t === 'error') {
       const quiet = !wanted; // our old room is gone (the crew closed while we were away): no fuss
       leftCrew();

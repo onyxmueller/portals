@@ -51,6 +51,7 @@ try {
   const joinedA = a.last('joined');
   const code = joinedA && joinedA.code;
   check('ping is answered', a.log.some((m) => m.t === 'pong' && m.ts === 7));
+  check('the server says which version it is on connecting', typeof a.last('hello')?.version === 'string');
   check('starting a crew gives a 4-letter code', /^[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(code || ''));
   check('whoever starts the crew is captain', a.last('room').captain === joinedA.id);
 

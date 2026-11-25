@@ -87,6 +87,10 @@ Pushing to `main` runs `.github/workflows/deploy.yml`: it builds the page, runs 
 The server watches that file and restarts the relay when it changes, and the workflow finishes by
 confirming https://portals.onyxmueller.net/version reports the new commit.
 
+A browser tab that was already open notices the new version when the server restarts and reloads
+itself (never in the middle of a game), coming back to the same crew and room. The phone apps
+carry their own copy of the game, so they only change when a new build is installed.
+
 The workflow needs the repo secrets `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_PORT` and `SSH_USER`. The
 deploy key is restricted on the server with `rrsync` to that one folder, which it sees as `/`, so
 it can copy files but can't run commands.

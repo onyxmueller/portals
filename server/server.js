@@ -247,6 +247,7 @@ wss.on('connection', (ws, req) => {
     device: /iPhone|iPad/.test(agent) ? 'iPhone' : /Android/.test(agent) ? 'Android' : /Mozilla/.test(agent) ? 'computer' : 'script',
   };
   conns.add(conn);
+  send(ws, { t: 'hello', version: REVISION }); // lets an open browser tab notice it's out of date
 
   ws.on('message', (data) => {
     let m;
