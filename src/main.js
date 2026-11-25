@@ -3,6 +3,8 @@ import { DPR, view, measure } from './view.js';
 import { COLORS } from './config/settings.js';
 import { connect } from './net.js';
 import { TitleScene } from './scenes/TitleScene.js';
+import { HomeScene } from './scenes/HomeScene.js';
+import { JoinScene } from './scenes/JoinScene.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { ResultsScene } from './scenes/ResultsScene.js';
@@ -22,7 +24,7 @@ window.game = new Phaser.Game({
   scale: { mode: Phaser.Scale.NONE, width, height, zoom: 1 / DPR },
   input: { activePointers: 4 }, // several fingers can drag parts at once
   disableContextMenu: true,
-  scene: [TitleScene, LobbyScene, GameScene, ResultsScene],
+  scene: [TitleScene, HomeScene, JoinScene, LobbyScene, GameScene, ResultsScene],
 });
 
 window.addEventListener('resize', () => {

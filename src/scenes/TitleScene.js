@@ -18,7 +18,8 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.prompt, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
     followResize(this);
 
-    const board = () => this.scene.start(sceneFor(state.game.phase));
+    // Already in a crew (back after closing the app, or arriving by invite link)? Go straight to the ship.
+    const board = () => this.scene.start(state.crew ? sceneFor(state.game.phase) : 'Home');
     this.input.once('pointerup', () => { initAudio(); board(); });
     // Testing shortcut: add ?skip to the address to go straight in (no sound until the first tap).
     if (new URLSearchParams(location.search).has('skip')) this.time.delayedCall(600, board);

@@ -11,7 +11,7 @@ import { net, state, send, connected, mySelf, others } from '../net.js';
 import { targetFor, segments, stripPos, stripPoint, portals } from '../throw/edges.js';
 import { text, emoji, hex } from '../ui/widgets.js';
 import { sfx, initAudio } from '../audio/sfx.js';
-import { buzz, NATIVE } from '../native.js';
+import { buzz } from '../native.js';
 
 const R = SETTINGS.partRadius;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -37,6 +37,7 @@ export class Deck {
     scene.input.on('pointerupoutside', this.onUp, this);
 
     net.on('room', this.refresh, this);
+    net.on('online', this.refreshStatus, this);
     net.on('ping', this.refreshStatus, this);
     net.on('throw', this.onThrow, this);
     net.on('spawn', this.onSpawn, this);
@@ -49,6 +50,7 @@ export class Deck {
 
   destroy() {
     net.off('room', this.refresh, this);
+    net.off('online', this.refreshStatus, this);
     net.off('ping', this.refreshStatus, this);
     net.off('throw', this.onThrow, this);
     net.off('spawn', this.onSpawn, this);
@@ -97,7 +99,7 @@ export class Deck {
     const out = edge === 'L' ? -it.vx : edge === 'R' ? it.vx : edge === 'T' ? -it.vy : it.vy;
     if (out < SETTINGS.flingSpeed || !connected()) return false;
     const p = targetFor(edge, it.x, it.y);
-    if (!p) return false;
+    if (!p || p.away) return false; // nobody there to catch it
     const msg = { t: 'throw', to: p.id, mode: state.mode, item: { id: it.id, kind: it.kind } };
     if (state.mode === 'neighbors') {
       // Phones side by side: keep height and velocity, so it reads as one continuous surface.
@@ -265,7 +267,7 @@ export class Deck {
     for (const l of this.portalLabels) l.destroy();
     this.portalLabels = [];
     for (const { p, t0, t1 } of portals()) {
-      g.fillStyle(hex(p.color), 1);
+      g.fillStyle(hex(p.color), p.away ? 0.3 : 1); // a crewmate who dropped out keeps their place, dimmed
       const cuts = [t0, H, H + W, t1].filter((t) => t >= t0 && t <= t1).sort((a, b) => a - b);
       for (let i = 0; i < cuts.length - 1; i++) {
         const a = cuts[i] + (i === 0 ? gap : 0), b = cuts[i + 1] - (i === cuts.length - 2 ? gap : 0);
@@ -275,13 +277,13 @@ export class Deck {
         else g.fillRect(Math.min(pa.x, pb.x), 0, Math.abs(pb.x - pa.x), T);
       }
       const m = stripPoint((t0 + t1) / 2);
-      const label = text(this.scene, m.x - m.nx * 28, m.y - m.ny * 28, `to ${p.name}`, { size: 15, weight: '700', color: p.color })
-        .setRotation(m.nx < 0 ? -Math.PI / 2 : m.nx > 0 ? Math.PI / 2 : 0).setDepth(2);
+      const label = text(this.scene, m.x - m.nx * 28, m.y - m.ny * 28, p.away ? `${p.name} is away` : `to ${p.name}`, { size: 15, weight: '700', color: p.color })
+        .setRotation(m.nx < 0 ? -Math.PI / 2 : m.nx > 0 ? Math.PI / 2 : 0).setDepth(2).setAlpha(p.away ? 0.45 : 1);
       this.portalLabels.push(label);
     }
 
     this.waiting.setPosition(W / 2, H * 0.66)
-      .setText(o.length || !self ? '' : `Waiting for more crew to join…\n${NATIVE ? 'portals.onyxmueller.net' : location.host}`);
+      .setText(o.length || !self ? '' : 'Waiting for crew to join…\nTap Invite to bring someone aboard.');
 
     const sy = H - view.safeBottom - 28;
     this.dot.setPosition(19, sy).setFillStyle(self ? hex(self.color) : 0x555555);
@@ -296,8 +298,8 @@ export class Deck {
   refreshStatus() {
     const self = mySelf();
     const ping = state.pingMs != null ? `\n${state.pingMs}ms (worst ${Math.max(...state.pings)})` : '';
-    this.status.setText(state.full ? 'The ship is full (8 crew)'
-      : self ? `${self.name} · ${state.players.length} aboard${ping}` : 'Connecting…');
+    const here = state.players.filter((p) => !p.away).length;
+    this.status.setText(!state.online ? 'Reconnecting…' : self ? `${self.name} · ${here} aboard${ping}` : 'Connecting…');
   }
 
   // Big "Your room is Engine" for a few seconds after joining.

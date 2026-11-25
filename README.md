@@ -10,7 +10,15 @@ Live at https://portals.onyxmueller.net. Open it on two or more phones (iOS or A
 Each phone is a room on the ship (Engine, Bridge, Medbay...) with its own colour. The strips on
 your screen edges show which room a part goes to if you fling it off that edge.
 
-Press **Launch** when everyone is aboard. Then:
+**Getting a crew together.** One person taps **Start a crew** and gets a four-letter code. Others
+tap **Join a crew** and type it, or scan the QR code on the **Invite** panel with their phone's
+camera, which opens the game in their browser already in the crew (no app needed). Whoever started
+the crew is the captain (★) and is the one who can launch. Any number of crews can play at once.
+
+If your phone drops out (it sleeps, or switches between Wi-Fi and cellular), your room is held
+for a minute and you get it back when you reconnect, even if you closed the app in between.
+
+The captain presses **Launch** when everyone is aboard. Then:
 
 - **Faults** appear in your room with a ring that drains as time runs out, and the part they need
   ("Fire, needs Extinguisher").
@@ -29,7 +37,7 @@ map to rooms (for everyone):
   Seating order is join order.
 - **Portals**: every other room owns a coloured stretch of your left, top and right edges.
 
-Add `?room=name` to the address for a separate room. The status bar shows your round trip to the
+The status bar shows your round trip to the
 server in milliseconds, and the worst of the last 30 seconds.
 
 ## Run it on your own computer
@@ -41,8 +49,16 @@ server in milliseconds, and the worst of the last 30 seconds.
 for phones on the same Wi-Fi (the one on port 5173). `npm start` builds the page and runs it the
 way the live server does, on port 3000.
 
-Testing shortcuts: add `?skip` to the address to jump past the title screen, `?settings` to open
-Settings straight away, and `?room=name` to use a separate room.
+Testing shortcuts you can add to the address (join several with `&`):
+
+| Shortcut | What it does |
+|---|---|
+| `?skip` | Jump past the title screen |
+| `?start` | Start a crew straight away |
+| `?join` | Open the Join screen |
+| `?crew=CODE` | Join that crew (this is what invite links use) |
+| `?invite`, `?settings` | Open that panel in the lobby |
+| `?fresh` | Forget the crew this browser was last in (handy with several tabs) |
 
 ## Native apps (iOS and Android)
 
@@ -92,11 +108,11 @@ installs the server's packages.
 | `src/config/parts.js` | The parts and the fault each one fixes |
 | `src/deck/Deck.js` | The play area: parts, portals along the edges, dragging, and the throw physics |
 | `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to |
-| `src/scenes/` | The screens: title, lobby (docked), game (flying), results (ship lost) |
-| `src/ui/` | Buttons, sharp text, and the Settings panel |
+| `src/scenes/` | The screens: title, home (start or join a crew), join (type a code), lobby (docked), game (flying), results (ship lost) |
+| `src/ui/` | Buttons, sharp text, the Settings panel and the Invite panel (crew code and QR) |
 | `src/net.js` | The connection to the game server |
 | `src/audio/sfx.js` | Sound effects, made in code |
-| `server/server.js` | The game server: serves the page, forwards throws, and runs the ship (faults, hull, score). The difficulty numbers are at the top |
+| `server/server.js` | The game server: serves the page, groups phones into crews, forwards throws, and runs each crew's ship (faults, hull, score). The difficulty numbers are near the top |
 | `server/scripts/check-relay.mjs` | The check GitHub runs before every deploy |
 | `server/scripts/latency.mjs` | Measures how long a throw takes to travel through a server |
 | `server/setup-server.sh` | One-time server setup |

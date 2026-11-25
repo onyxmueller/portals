@@ -68,6 +68,9 @@ in Phase 4; see the ideas there.
 Built so far, as a prototype:
 
 - Flinging between phones, through a server anyone can reach (https://portals.onyxmueller.net).
+- Built on Phaser 3 + Vite, with separate screens for title, home, join, lobby, game and results.
+- Crews: start one and share a code, QR code or link; a captain who launches; rooms held for a
+  minute when a phone drops out; any number of crews at once.
 - iOS and Android apps (Capacitor) that use the same page.
 - The spaceship game: rooms, faults with timers, parts that appear in another room, a shared
   hull, a score, an airlock for junk, and difficulty that climbs.
@@ -86,7 +89,7 @@ No new features. Play with as many people as we can gather (3 or 4 is ideal).
 
 **Done when:** we know the loop is fun. If it isn't, the rest of this plan changes.
 
-### Phase 1: Foundation (built, waiting for a two-phone test)
+### Phase 1: Foundation (done)
 
 Rebuild the page on Phaser 3 + Vite. Same game, no new features.
 
@@ -97,7 +100,7 @@ Rebuild the page on Phaser 3 + Vite. Same game, no new features.
 
 **Done when:** the rebuilt game plays the same as the prototype on both phones.
 
-### Phase 2: Crews
+### Phase 2: Crews (built, waiting for a real two-group test)
 
 Any group can start their own journey.
 
@@ -107,6 +110,13 @@ Any group can start their own journey.
 - Lots of crews can play at once without getting in each other's way.
 
 **Done when:** two separate groups can play at the same time without seeing each other.
+
+Left for later, on purpose:
+
+- **Scanning a QR code from inside the app.** Today the QR code is scanned with the phone's own
+  camera and opens the web game. App-to-app joining uses the typed code.
+- **Invite links that open the app** when it's installed. That needs the app-store setup from
+  Phase 7; until then links always open the web game.
 
 ### Phase 3: Where is my crewmate
 

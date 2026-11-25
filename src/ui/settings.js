@@ -2,7 +2,7 @@
 // only), and a few housekeeping buttons. Tap outside it to close.
 import { view } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
-import { net, state, send } from '../net.js';
+import { net, state, send, isCaptain, leaveCrew } from '../net.js';
 import { text, button } from './widgets.js';
 
 const HELP = {
@@ -43,8 +43,13 @@ export function openSettings(scene) {
   stepper('Friction', 'friction', 0.2, 0, 5, (v) => v.toFixed(1));
   y += 10;
 
-  if (scene.deck) place(button(scene, 'Clear my parts', () => scene.deck.clear(), { w: half }), -half / 2 - 4);
-  const end = place(button(scene, 'End game', () => { send({ t: 'end' }); close(); }, { w: half }), half / 2 + 4);
+  // Docked: practice parts. Flying: the captain can end the game.
+  const docked = state.game.phase === 'lobby';
+  if (docked) place(button(scene, '+ Practice part', () => scene.deck.spawnRandom(), { w: half }), -half / 2 - 4);
+  else place(button(scene, 'End game', () => { send({ t: 'end' }); close(); }, { w: half }).setVisible(isCaptain()), -half / 2 - 4);
+  place(button(scene, 'Clear my parts', () => scene.deck.clear(), { w: half }), half / 2 + 4);
+  y += 50;
+  place(button(scene, 'Leave crew', () => leaveCrew(), { w: pw - 32 }), 0);
   y += 36;
 
   // Background last, so we know how tall the panel turned out. It swallows taps so they don't close the panel.
@@ -56,7 +61,6 @@ export function openSettings(scene) {
     neighbors.setOn(state.mode === 'neighbors');
     portals.setOn(state.mode === 'portals');
     help.setText(HELP[state.mode]);
-    end.setVisible(state.game.phase !== 'lobby');
   };
   function close() {
     net.off('room', sync); net.off('game', sync);

@@ -12,6 +12,10 @@ export const SETTINGS = {
 
 // The live game server. The phone apps always use it; the website uses whichever server sent the page.
 export const RELAY = 'wss://portals.onyxmueller.net';
+// Where invite links and QR codes point. Opening one starts the web game already in the crew.
+export const SITE = 'https://portals.onyxmueller.net';
+export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ'; // the letters crew codes are made of (matches the server)
+export const CODE_LENGTH = 4;
 
 export const COLORS = {
   background: 0x14161c,

@@ -8,21 +8,23 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 const base = (process.argv[2] || 'http://localhost:3000').replace(/^http/, 'ws').replace(/\/$/, '');
 const count = Number(process.argv[3]) || 200;
-const url = `${base}/?room=latency-${Date.now().toString(36)}`;
 
-function join() {
+// Connect, then start a crew (no code given) or join one. Resolves once we're aboard.
+function board(code) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(`${base}/`);
     ws.on('error', reject);
-    ws.on('message', function hello(d) {
+    ws.on('open', () => ws.send(JSON.stringify(code ? { t: 'join', code } : { t: 'create' })));
+    ws.on('message', function joined(d) {
       const m = JSON.parse(d);
-      if (m.t === 'hello') { ws.off('message', hello); ws.id = m.id; resolve(ws); }
+      if (m.t === 'error') reject(new Error(`could not join: ${m.reason}`));
+      if (m.t === 'joined') { ws.off('message', joined); ws.id = m.id; ws.code = m.code; resolve(ws); }
     });
   });
 }
 
-const a = await join();
-const b = await join();
+const a = await board();
+const b = await board(a.code);
 const times = [];
 let pending = null;
 b.on('message', (d) => {
