@@ -43,6 +43,7 @@ function serveFile(pathname, res) {
 let REVISION = 'dev';
 try { REVISION = fs.readFileSync(path.join(__dirname, 'REVISION'), 'utf8').trim(); } catch {}
 const MAX_PLAYERS = 8;
+const SILENCE_LIMIT = 6000; // a phone that says nothing for this long (ms) is dropped; phones ping every second
 // Each player is a room on the ship, with a colour.
 const COLORS = [
   ['Engine', '#ff6b6b'], ['Bridge', '#4dabf7'], ['Garden', '#94d82d'], ['Reactor', '#ffd43b'],
@@ -115,6 +116,17 @@ function tick(room) {
 }
 setInterval(() => { for (const room of rooms.values()) tick(room); }, 250);
 
+// A phone that switches from Wi-Fi to cellular, or goes to sleep, often vanishes without saying
+// goodbye. Its old connection would otherwise sit in the crew as a ghost for many minutes.
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    for (const p of room.players) {
+      if (now - p.lastHeard > SILENCE_LIMIT) { p.silent = true; p.ws.terminate(); }
+    }
+  }
+}, 1000);
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/version') {
@@ -153,16 +165,21 @@ wss.on('connection', (ws, req) => {
 
   const used = new Set(room.players.map((p) => p.color));
   const [name, color] = COLORS.find(([, c]) => !used.has(c));
-  const player = { id: nextId++, name, color, ws };
+  const player = { id: nextId++, name, color, ws, lastHeard: Date.now() };
   room.players.push(player);
   send(ws, { t: 'hello', id: player.id, room: roomName });
   broadcastRoom(room);
   broadcastGame(room);
-  console.log(`[${roomName}] + ${name} (${room.players.length} players)`);
+  // Who joined, for working out later which device was which. Apache passes the real address along.
+  const from = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?').split(',')[0].trim();
+  const agent = req.headers['user-agent'] || '';
+  const device = /iPhone|iPad/.test(agent) ? 'iPhone' : /Android/.test(agent) ? 'Android' : /Mozilla/.test(agent) ? 'computer' : 'script';
+  console.log(`[${roomName}] + ${name} (${room.players.length} players) from ${from}, ${device}`);
 
   ws.on('message', (data) => {
     let m;
     try { m = JSON.parse(data); } catch { return; }
+    player.lastHeard = Date.now();
     if (m.t === 'ping') {
       send(ws, { t: 'pong', ts: m.ts });
     } else if (m.t === 'throw') {
@@ -195,7 +212,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     room.players = room.players.filter((p) => p !== player);
-    console.log(`[${roomName}] - ${name} (${room.players.length} players)`);
+    console.log(`[${roomName}] - ${name} (${room.players.length} players)${player.silent ? ', went silent' : ''}`);
     room.game.faults = room.game.faults.filter((f) => f.owner !== player.id); // their faults leave with them
     if (room.players.length) { broadcastRoom(room); broadcastGame(room); }
     else rooms.delete(roomName);

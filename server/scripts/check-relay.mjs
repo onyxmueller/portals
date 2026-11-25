@@ -73,7 +73,16 @@ try {
   await wait(200);
   check('ending returns to dock', lastGame(b).phase === 'lobby');
 
-  b.close();
+  // A phone that goes quiet (no pings) is dropped from the crew.
+  // a keeps pinging like a real phone; b says nothing.
+  for (let i = 0; i < 8; i++) { a.send(JSON.stringify({ t: 'ping', ts: 2 })); await wait(1000); }
+  check('a silent phone is dropped', lastRoom(a).players.length === 1 && lastRoom(a).players[0].id === idA);
+  check('a phone that keeps talking stays', a.readyState === WebSocket.OPEN && b.readyState !== WebSocket.OPEN);
+
+  const c = await join();
+  await wait(200);
+  check('joining updates the roster', lastRoom(a).players.length === 2);
+  c.close();
   await wait(200);
   check('leaving updates the roster', lastRoom(a).players.length === 1);
   a.close();
