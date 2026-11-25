@@ -1,0 +1,77 @@
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Use the standard checkout action to pull down repo
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Use the Node version from .node-version, with npm caching
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Two pretend players must be able to join and throw (see scripts/check-relay.mjs)
+      - name: Check relay
+        run: npm run check
+
+      # Everything the server needs goes into bundle/, including the one runtime
+      # library (ws), so the server only needs Node and never runs npm itself.
+      - name: Bundle
+        run: |
+          mkdir bundle
+          cp -r server.js package.json package-lock.json public bundle/
+          cd bundle && npm ci --omit=dev
+
+      # Use the public ssh-key-action action to setup an additional SSH key
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+
+      # Add webserver to known_hosts file
+      - name: Adding Known Hosts
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      # Deploy with rsync. --delete-after mirrors bundle/ to the app folder so
+      # old files don't linger, and waits until the transfer finishes.
+      #
+      # The deploy key is locked on the server (rrsync in authorized_keys) to
+      # /var/www/portals.onyxmueller.net/, which it sees as "/".
+      - name: Deploy with rsync
+        run: rsync -avz --delete-after --exclude REVISION -e "ssh -p ${{ secrets.SSH_PORT }}" ./bundle/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/
+
+      # The deploy key can't run commands, so it can't restart the relay itself.
+      # Instead the server watches the REVISION file and restarts the relay when
+      # it changes (see deploy/setup-server.sh). It is written last, on its own,
+      # so the restart happens only after every other file is in place.
+      - name: Trigger restart
+        run: |
+          echo "${{ github.sha }}" > REVISION
+          rsync -avz --inplace -e "ssh -p ${{ secrets.SSH_PORT }}" ./REVISION ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/REVISION
+
+      # The relay reports the REVISION it started with, so this proves the new code is live.
+      - name: Confirm new version is live
+        run: |
+          for i in $(seq 1 20); do
+            live=$(curl -fsS https://portals.onyxmueller.net/version || true)
+            if [ "$live" = "${{ github.sha }}" ]; then echo "Live: $live"; exit 0; fi
+            sleep 3
+          done
+          echo "Expected ${{ github.sha }} but the server reports: $live"
+          exit 1

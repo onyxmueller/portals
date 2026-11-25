@@ -1,0 +1,28 @@
+name: build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Use the standard checkout action to pull down repo
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Use the Node version from .node-version, with npm caching
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Two pretend players must be able to join and throw (see scripts/check-relay.mjs)
+      - name: Check relay
+        run: npm run check
