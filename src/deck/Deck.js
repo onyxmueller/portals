@@ -135,6 +135,12 @@ export class Deck {
     } else {
       it.x = W / 2; it.y = H / 2; it.state = 'in';
     }
+    // Arrive at a steady speed however hard it was thrown, keeping its direction. Otherwise
+    // a hard throw sails straight across this phone and out the far side to someone else.
+    const speed = Math.hypot(it.vx || 0, it.vy || 0);
+    if (SETTINGS.arrivalSpeed > 0 && speed > 0) {
+      it.vx *= SETTINGS.arrivalSpeed / speed; it.vy *= SETTINGS.arrivalSpeed / speed;
+    }
     this.add(it);
     this.flash(clamp(it.x, 0, W), clamp(it.y, 0, H), from ? hex(from.color) : 0xffffff);
     sfx.receive(); buzz('MEDIUM');

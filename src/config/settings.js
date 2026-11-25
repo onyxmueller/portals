@@ -2,6 +2,8 @@
 export const SETTINGS = {
   partRadius: 34,       // how big a part is
   flingSpeed: 350,      // how fast a part must hit an edge to travel to another phone
+  arrivalSpeed: 450,    // how fast a part arrives on the other phone, however hard it was thrown.
+                        // At this speed it slides about two thirds of the way across. 0 = as fast as it was thrown
   friction: 1.6,        // how quickly a sliding part slows down (bigger = stops sooner)
   bounce: 0.6,          // how much speed a part keeps when it bounces off an edge
   maxThrowSpeed: 4500,  // cap on how fast a finger can throw

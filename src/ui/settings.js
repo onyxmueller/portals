@@ -40,6 +40,7 @@ export function openSettings(scene) {
     y += 44;
   };
   stepper('Fling speed needed', 'flingSpeed', 50, 50, 1500, (v) => v);
+  stepper('Arrival speed', 'arrivalSpeed', 50, 0, 1500, (v) => (v === 0 ? 'as thrown' : v));
   stepper('Friction', 'friction', 0.2, 0, 5, (v) => v.toFixed(1));
   y += 10;
 
