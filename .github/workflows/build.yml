@@ -19,10 +19,14 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+          cache-dependency-path: server/package-lock.json
 
+      # Only the server is installed and checked here; the phone apps are built in Xcode / Android Studio.
       - name: Install
         run: npm ci
+        working-directory: server
 
-      # Two pretend players must be able to join and throw (see scripts/check-relay.mjs)
-      - name: Check relay
+      # Two pretend players must be able to join and throw (see server/scripts/check-relay.mjs)
+      - name: Check server
         run: npm run check
+        working-directory: server

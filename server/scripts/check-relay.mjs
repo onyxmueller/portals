@@ -1,11 +1,12 @@
 // Starts the relay on a spare port and checks the basics with two pretend players.
 // GitHub runs this before every deploy, so a broken relay never goes live.
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as wait } from 'node:timers/promises';
 import WebSocket from 'ws';
 
 const PORT = 39011;
-const server = spawn(process.execPath, ['server.js'], {
+const server = spawn(process.execPath, [fileURLToPath(new URL('../server.js', import.meta.url))], {
   env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' },
   stdio: 'ignore',
 });
@@ -53,6 +54,24 @@ try {
   check('a mode change reaches everyone', lastRoom(b).mode === 'portals');
   check('a throw to a missing player comes back', a.log.some((m) => m.t === 'bounce' && m.item.id === 'x2'));
   check('ping is answered', a.log.some((m) => m.t === 'pong' && m.ts === 1));
+
+  // The ship: launch, wait for the first fault, fix it.
+  const lastGame = (ws) => ws.log.filter((m) => m.t === 'game').pop();
+  check('ship starts docked', lastGame(a).phase === 'lobby');
+  a.send(JSON.stringify({ t: 'launch' }));
+  await wait(1600);
+  const fault = lastGame(a).faults[0];
+  check('launch starts the game and a fault appears', lastGame(b).phase === 'run' && !!fault);
+  if (fault) {
+    const owner = fault.owner === idA ? a : b, other = owner === a ? b : a;
+    check('the part to fix it appears in the other room', other.log.some((m) => m.t === 'spawn' && m.item.kind === fault.kind));
+    owner.send(JSON.stringify({ t: 'fix', id: fault.id }));
+    await wait(200);
+    check('fixing it scores a point', lastGame(other).score === 1 && !lastGame(other).faults.some((f) => f.id === fault.id));
+  }
+  a.send(JSON.stringify({ t: 'end' }));
+  await wait(200);
+  check('ending returns to dock', lastGame(b).phase === 'lobby');
 
   b.close();
   await wait(200);

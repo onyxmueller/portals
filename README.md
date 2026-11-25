@@ -1,18 +1,33 @@
 # Portals
 
-A prototype of one mechanic: fling an object off the edge of your phone and it lands on someone
-else's. No game around it yet.
+A prototype co-op game for 2 to 8 phones: you are the crew of a failing spaceship, and you fix it
+by flinging parts from one phone to another. "Portals" is a working title.
 
 Live at https://portals.onyxmueller.net. Open it on two or more phones (iOS or Android).
 
 ## Play
 
-Drag an item and let go to fling it. Hit an edge fast enough and it travels to another player;
-too slow and it bounces back. Settings switches how edges map to players (for the whole room):
+Each phone is a room on the ship (Engine, Bridge, Medbay...) with its own colour. The strips on
+your screen edges show which room a part goes to if you fling it off that edge.
 
-- **Neighbors**: left edge goes to the player on your left, right edge to the player on your
-  right. Seating order is join order.
-- **Portals**: every other player owns a coloured stretch of your left, top and right edges.
+Press **Launch** when everyone is aboard. Then:
+
+- **Faults** appear in your room with a ring that drains as time runs out, and the part they need
+  ("Fire, needs Extinguisher").
+- The part turns up in **someone else's room**, so shout for it. They fling it to you; drop it on
+  the fault to fix it. A good throw can land straight on the fault.
+- A fault that runs out costs the shared **hull** 15%. At zero the ship is lost. The score is how
+  many faults the crew fixed.
+- Faults come faster, give less time, and use more kinds of part as the score climbs.
+- Spare parts pile up. Leave one on the **airlock** to throw it away.
+
+Before launch the ship is docked and you can practise throwing. To fling: drag a part and let go.
+Hit an edge fast enough and it travels; too slow and it bounces back. Settings switches how edges
+map to rooms (for everyone):
+
+- **Neighbors**: left edge goes to the room on your left, right edge to the room on your right.
+  Seating order is join order.
+- **Portals**: every other room owns a coloured stretch of your left, top and right edges.
 
 Add `?room=name` to the address for a separate room. The status bar shows your round trip to the
 server in milliseconds, and the worst of the last 30 seconds.
@@ -45,7 +60,7 @@ new page. Building needs Xcode, and Android Studio (its bundled Java is new enou
 
 ## Deploy
 
-Pushing to `main` runs `.github/workflows/deploy.yml`: it runs the check, rsyncs the relay to
+Pushing to `main` runs `.github/workflows/deploy.yml`: it runs the check, rsyncs `server/` and `public/` to
 `/var/www/portals.onyxmueller.net/` on the web server, then rewrites the `REVISION` file there.
 The server watches that file and restarts the relay when it changes, and the workflow finishes by
 confirming https://portals.onyxmueller.net/version reports the new commit.
@@ -54,16 +69,20 @@ The workflow needs the repo secrets `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_PORT` an
 deploy key is restricted on the server with `rrsync` to that one folder, which it sees as `/`, so
 it can copy files but can't run commands.
 
-The server was set up once with `deploy/setup-server.sh`. It creates the folder, adds the deploy
+The server was set up once with `server/setup-server.sh`. It creates the folder, adds the deploy
 key, runs the relay as a service on `127.0.0.1:3070`, and adds the Apache site that passes web and
 WebSocket traffic to it.
 
 ## Where things live
 
+The repo has one folder per thing that runs: `server/` (the game server, with its own
+`package.json`), `ios/` and `android/` (the phone apps), and `public/` (the game page, shared by
+the server and both apps). `npm install` at the top level also installs the server's packages.
+
 | File | What's in it |
 |---|---|
-| `public/index.html` | The whole game page: physics, touch input, edge mapping, drawing |
-| `server.js` | The relay: serves the page, keeps the room roster, forwards throws |
-| `scripts/check-relay.mjs` | The check GitHub runs before every deploy |
-| `scripts/latency.mjs` | Measures how long a throw takes to travel through a server |
-| `deploy/setup-server.sh` | One-time server setup |
+| `public/index.html` | The whole game page: physics, touch input, edge mapping, drawing, and the list of parts and faults |
+| `server/server.js` | The game server: serves the page, forwards throws, and runs the ship (faults, hull, score). The difficulty numbers are at the top |
+| `server/scripts/check-relay.mjs` | The check GitHub runs before every deploy |
+| `server/scripts/latency.mjs` | Measures how long a throw takes to travel through a server |
+| `server/setup-server.sh` | One-time server setup |

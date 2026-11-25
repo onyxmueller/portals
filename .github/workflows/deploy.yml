@@ -21,20 +21,25 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+          cache-dependency-path: server/package-lock.json
 
+      # Only the server is installed and checked here; the phone apps are built in Xcode / Android Studio.
       - name: Install
         run: npm ci
+        working-directory: server
 
-      # Two pretend players must be able to join and throw (see scripts/check-relay.mjs)
-      - name: Check relay
+      # Two pretend players must be able to join and throw (see server/scripts/check-relay.mjs)
+      - name: Check server
         run: npm run check
+        working-directory: server
 
-      # Everything the server needs goes into bundle/, including the one runtime
-      # library (ws), so the server only needs Node and never runs npm itself.
+      # Everything the live server needs goes into bundle/: the server code, the page
+      # (public/, copied in beside it), and the one runtime library (ws), so the
+      # server only needs Node and never runs npm itself.
       - name: Bundle
         run: |
           mkdir bundle
-          cp -r server.js package.json package-lock.json public bundle/
+          cp -r server/server.js server/package.json server/package-lock.json public bundle/
           cd bundle && npm ci --omit=dev
 
       # Use the public ssh-key-action action to setup an additional SSH key
@@ -58,7 +63,7 @@ jobs:
 
       # The deploy key can't run commands, so it can't restart the relay itself.
       # Instead the server watches the REVISION file and restarts the relay when
-      # it changes (see deploy/setup-server.sh). It is written last, on its own,
+      # it changes (see server/setup-server.sh). It is written last, on its own,
       # so the restart happens only after every other file is in place.
       - name: Trigger restart
         run: |
