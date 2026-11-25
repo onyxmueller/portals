@@ -10,9 +10,36 @@ const { WebSocketServer } = require('ws');
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // the live server sets 127.0.0.1 and sits behind Apache
 // REVISION is written by the deploy workflow; /version reports it so a deploy can be confirmed.
-// The page lives in ../public in this repo (shared with the iOS and Android apps).
-// On the live server the deploy copies it next to this file, so look there first.
-const PUBLIC_DIR = [path.join(__dirname, 'public'), path.join(__dirname, '..', 'public')].find((d) => fs.existsSync(d));
+// The built game page. In this repo `npm run build` puts it in ../dist (the phone apps bundle
+// the same files). On the live server the deploy copies it next to this file as public/.
+const PUBLIC_DIR = [path.join(__dirname, 'public'), path.join(__dirname, '..', 'dist')].find((d) => fs.existsSync(d));
+const TYPES = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg',
+};
+
+function serveFile(pathname, res) {
+  if (!PUBLIC_DIR) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' }).end('The game page has not been built yet. Run: npm run build\n');
+    return;
+  }
+  let rel;
+  try { rel = decodeURIComponent(pathname); } catch { rel = '/'; }
+  if (rel.endsWith('/')) rel += 'index.html';
+  const file = path.join(PUBLIC_DIR, path.normalize(rel));
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(404).end(); return; } // no escaping the folder
+  fs.stat(file, (err, stat) => {
+    if (err || !stat.isFile()) { res.writeHead(404).end(); return; }
+    res.writeHead(200, {
+      'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
+      // Built files under assets/ have a fingerprint in their name, so they can be kept forever.
+      // Everything else is rechecked, so a new deploy shows up straight away.
+      'Cache-Control': rel.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    });
+    fs.createReadStream(file).pipe(res);
+  });
+}
 let REVISION = 'dev';
 try { REVISION = fs.readFileSync(path.join(__dirname, 'REVISION'), 'utf8').trim(); } catch {}
 const MAX_PLAYERS = 8;
@@ -90,13 +117,10 @@ setInterval(() => { for (const room of rooms.values()) tick(room); }, 250);
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (url.pathname === '/' || url.pathname === '/index.html') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    fs.createReadStream(path.join(PUBLIC_DIR, 'index.html')).pipe(res);
-  } else if (url.pathname === '/version') {
+  if (url.pathname === '/version') {
     res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }).end(REVISION + '\n');
   } else {
-    res.writeHead(404).end();
+    serveFile(url.pathname, res);
   }
 });
 

@@ -19,12 +19,14 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          cache-dependency-path: server/package-lock.json
 
-      # Only the server is installed and checked here; the phone apps are built in Xcode / Android Studio.
+      # Installs the page's packages and (through postinstall) the server's
       - name: Install
         run: npm ci
-        working-directory: server
+
+      # Builds the game page into dist/
+      - name: Vite Build
+        run: npm run build
 
       # Two pretend players must be able to join and throw (see server/scripts/check-relay.mjs)
       - name: Check server

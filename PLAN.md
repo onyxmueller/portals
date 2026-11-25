@@ -28,6 +28,25 @@ ship just complains a lot.
    person sitting there.
 4. **Everyone wins or loses together.** One hull, one score, no player left out.
 
+## More to do than fetch: stations
+
+Fetching a part and dropping it on a fault is where the game starts, not where it stays. On its
+own it would get boring. In later levels, parts have to be **worked on** before they're any use,
+and the work is a hands-on action that's different for each tool.
+
+- A **station** is a tool that lives in one room: a charger, a welder, a pump. You put a part on
+  it and do something with your fingers (spin, hold, tap, trace) to turn it into a new part.
+- Stations make **chains across rooms**. "I need a charged battery" means someone finds the dead
+  battery, throws it to the room with the charger, that room charges it, and throws it on.
+- Stations give each room a **job**. The Reactor is the room that charges things, so the crew
+  learns who to shout at.
+- Some work can go **wrong**: leave a patch on the welder too long and it's scrap for the airlock.
+- Some faults need work **in place** too, not just a part: scrub it, hold it, twist it.
+
+Early levels stay fetch-and-drop so new players learn throwing first. Stations arrive one at a
+time, one new one per level, and later levels chain two together. The exact stations get decided
+in Phase 4; see the ideas there.
+
 ## What we decided
 
 - **Same room first.** The game is designed for people sitting together. We don't rule out playing
@@ -67,7 +86,7 @@ No new features. Play with as many people as we can gather (3 or 4 is ideal).
 
 **Done when:** we know the loop is fun. If it isn't, the rest of this plan changes.
 
-### Phase 1: Foundation
+### Phase 1: Foundation (built, waiting for a two-phone test)
 
 Rebuild the page on Phaser 3 + Vite. Same game, no new features.
 
@@ -114,6 +133,14 @@ Start with 3 levels, then grow the campaign.
   - **Stowaways:** critters hop between screens and have to be flung out the airlock.
   - **Nebula:** your screen goes dark except near your finger.
   - **Wormhole:** the portals swap who they lead to.
+- **Stations** come in after the first few levels (see "More to do than fetch"). Ideas:
+  - **Charger:** drop a dead battery on it and spin your finger in circles to crank it full.
+  - **Welder:** hold a patch on the hot plate and let go in the green zone. Too long and it burns.
+  - **Pump:** tap fast to fill an empty coolant can before the pressure drops.
+  - **Fabricator:** put two parts in (scrap + wire) and get a new one out (a fuse).
+  - **Crates:** some parts arrive boxed, and only Cargo has the crowbar.
+  - **Two-room jobs:** a big part that two crewmates each have to hold at the same moment.
+  - **Work on the fault itself:** scrub off slime, hold a valve shut, twist a bolt tight.
 - Levels live in a simple data file that's easy to edit.
 - Difficulty scales with the size of the crew.
 - Story panels between levels.

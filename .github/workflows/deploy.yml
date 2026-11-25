@@ -21,25 +21,28 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          cache-dependency-path: server/package-lock.json
 
-      # Only the server is installed and checked here; the phone apps are built in Xcode / Android Studio.
+      # Installs the page's packages and (through postinstall) the server's
       - name: Install
         run: npm ci
-        working-directory: server
+
+      # Builds the game page into dist/
+      - name: Vite Build
+        run: npm run build
 
       # Two pretend players must be able to join and throw (see server/scripts/check-relay.mjs)
       - name: Check server
         run: npm run check
         working-directory: server
 
-      # Everything the live server needs goes into bundle/: the server code, the page
-      # (public/, copied in beside it), and the one runtime library (ws), so the
+      # Everything the live server needs goes into bundle/: the server code, the built
+      # page (dist/, copied in beside it as public/), and the one runtime library (ws), so the
       # server only needs Node and never runs npm itself.
       - name: Bundle
         run: |
           mkdir bundle
-          cp -r server/server.js server/package.json server/package-lock.json public bundle/
+          cp server/server.js server/package.json server/package-lock.json bundle/
+          cp -r dist bundle/public
           cd bundle && npm ci --omit=dev
 
       # Use the public ssh-key-action action to setup an additional SSH key

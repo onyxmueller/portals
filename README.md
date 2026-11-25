@@ -35,32 +35,38 @@ server in milliseconds, and the worst of the last 30 seconds.
 ## Run it on your own computer
 
     npm install
-    npm start
+    npm run dev
 
-It prints an address and a QR code for phones on the same Wi-Fi.
+`npm run dev` starts the game server and a page that reloads as you edit. It prints an address
+for phones on the same Wi-Fi (the one on port 5173). `npm start` builds the page and runs it the
+way the live server does, on port 3000.
+
+Testing shortcuts: add `?skip` to the address to jump past the title screen, `?settings` to open
+Settings straight away, and `?room=name` to use a separate room.
 
 ## Native apps (iOS and Android)
 
 The same page is wrapped with Capacitor into real apps (`ios/` and `android/`). The Android app id is
-`net.onyxmueller.portals`; the iOS one is `com.softronyx.portals`, signed with the Softronyx team. The page is bundled inside the app and talks to the live relay at
+`net.onyxmueller.portals`; the iOS one is `com.softronyx.portals`, signed with the Softronyx team.
+The built page is bundled inside the app and talks to the live server at
 `wss://portals.onyxmueller.net`, so the apps work on any network. They are locked to portrait and
 use the phone's real haptics.
 
-    npm run ios        # copy the page into the iOS app and open Xcode
-    npm run android    # copy the page into the Android app and open Android Studio
+    npm run ios        # build the page, copy it into the iOS app and open Xcode
+    npm run android    # build the page, copy it into the Android app and open Android Studio
 
-Then press Run. After changing `public/index.html`, run the command again (or `npx cap sync`) so the apps get the
-new page. Building needs Xcode, and Android Studio (its bundled Java is new enough; Java 17 is not).
+Then press Run. Run the command again after changing the game so the apps get the new build.
+Building needs Xcode, and Android Studio (its bundled Java is new enough; Java 17 is not).
 
 ## Check and measure
 
-    npm run check                                          # two pretend players join and throw
+    npm run check                                          # two pretend players join, throw and play
     npm run latency                                        # throw travel time, local server
     npm run latency -- https://portals.onyxmueller.net     # throw travel time, live server
 
 ## Deploy
 
-Pushing to `main` runs `.github/workflows/deploy.yml`: it runs the check, rsyncs `server/` and `public/` to
+Pushing to `main` runs `.github/workflows/deploy.yml`: it builds the page, runs the check, rsyncs the server and the built page to
 `/var/www/portals.onyxmueller.net/` on the web server, then rewrites the `REVISION` file there.
 The server watches that file and restarts the relay when it changes, and the workflow finishes by
 confirming https://portals.onyxmueller.net/version reports the new commit.
@@ -75,14 +81,23 @@ WebSocket traffic to it.
 
 ## Where things live
 
-The repo has one folder per thing that runs: `server/` (the game server, with its own
-`package.json`), `ios/` and `android/` (the phone apps), and `public/` (the game page, shared by
-the server and both apps). `npm install` at the top level also installs the server's packages.
+The game is built with Phaser 3 and Vite. The repo has one folder per thing that runs: `src/`
+(the game page), `server/` (the game server, with its own `package.json`), and `ios/` and
+`android/` (the phone apps, which bundle the built page). `npm install` at the top level also
+installs the server's packages.
 
 | File | What's in it |
 |---|---|
-| `public/index.html` | The whole game page: physics, touch input, edge mapping, drawing, and the list of parts and faults |
+| `src/config/settings.js` | Part size, fling speed, friction, colours, the live server's address |
+| `src/config/parts.js` | The parts and the fault each one fixes |
+| `src/deck/Deck.js` | The play area: parts, portals along the edges, dragging, and the throw physics |
+| `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to |
+| `src/scenes/` | The screens: title, lobby (docked), game (flying), results (ship lost) |
+| `src/ui/` | Buttons, sharp text, and the Settings panel |
+| `src/net.js` | The connection to the game server |
+| `src/audio/sfx.js` | Sound effects, made in code |
 | `server/server.js` | The game server: serves the page, forwards throws, and runs the ship (faults, hull, score). The difficulty numbers are at the top |
 | `server/scripts/check-relay.mjs` | The check GitHub runs before every deploy |
 | `server/scripts/latency.mjs` | Measures how long a throw takes to travel through a server |
 | `server/setup-server.sh` | One-time server setup |
+| `PLAN.md` | The phased plan for the whole game |

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Portals</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #14161c;
+    overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; touch-action: none; }
+  /* Invisible. The game reads its padding to learn how big the notch and home-bar areas are. */
+  #probe { position: fixed; visibility: hidden;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="probe"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
