@@ -2,7 +2,9 @@
 # One-time server setup for portals.onyxmueller.net (Ubuntu + Apache).
 # Safe to run again: every step checks before it changes anything.
 #
-#   sudo bash setup-server.sh "<deploy public key>" [deploy-user]
+#   sudo bash setup-server.sh ["<deploy public key>"] [deploy-user]
+#
+# Leave the key out to set up everything else; run again with it to add the key.
 #
 # What it does:
 #   1. Makes /var/www/portals.onyxmueller.net/ and lets the GitHub deploy key
@@ -20,7 +22,6 @@ PUBKEY=${1:-}
 DEPLOY_USER=${2:-${SUDO_USER:-}}
 
 [ "$(id -u)" = 0 ] || { echo "Run with sudo."; exit 1; }
-[ -n "$PUBKEY" ] || { echo "Usage: sudo bash $0 \"<deploy public key>\" [deploy-user]"; exit 1; }
 [ -n "$DEPLOY_USER" ] && id "$DEPLOY_USER" >/dev/null || { echo "Unknown deploy user '$DEPLOY_USER'."; exit 1; }
 if ss -ltn "sport = :$PORT" | grep -q LISTEN && ! systemctl is-active -q portals.service; then
   echo "Port $PORT is already used by something else. Change PORT at the top of this script."; exit 1
@@ -37,19 +38,23 @@ echo "$NODE $($NODE --version)"
 echo "== App folder + deploy key"
 mkdir -p "$APP_DIR"
 chown "$DEPLOY_USER": "$APP_DIR"
-RRSYNC=$(command -v rrsync || true)
-[ -n "$RRSYNC" ] || RRSYNC=/usr/share/doc/rsync/scripts/rrsync
-[ -e "$RRSYNC" ] || { echo "rrsync not found (apt-get install rsync)."; exit 1; }
-HOME_DIR=$(getent passwd "$DEPLOY_USER" | cut -d: -f6)
-AUTH=$HOME_DIR/.ssh/authorized_keys
-install -d -m 700 -o "$DEPLOY_USER" -g "$(id -gn "$DEPLOY_USER")" "$HOME_DIR/.ssh"
-KEY_BODY=$(echo "$PUBKEY" | awk '{print $2}')
-if grep -qF "$KEY_BODY" "$AUTH" 2>/dev/null; then
-  echo "Deploy key already in $AUTH"
+if [ -z "$PUBKEY" ]; then
+  echo "No deploy key given, skipping (run again with the public key to add it)"
 else
-  echo "command=\"$RRSYNC $APP_DIR/\",restrict $PUBKEY" >> "$AUTH"
-  chown "$DEPLOY_USER": "$AUTH"; chmod 600 "$AUTH"
-  echo "Added deploy key to $AUTH (locked to $APP_DIR/)"
+  RRSYNC=$(command -v rrsync || true)
+  [ -n "$RRSYNC" ] || RRSYNC=/usr/share/doc/rsync/scripts/rrsync
+  [ -e "$RRSYNC" ] || { echo "rrsync not found (apt-get install rsync)."; exit 1; }
+  HOME_DIR=$(getent passwd "$DEPLOY_USER" | cut -d: -f6)
+  AUTH=$HOME_DIR/.ssh/authorized_keys
+  install -d -m 700 -o "$DEPLOY_USER" -g "$(id -gn "$DEPLOY_USER")" "$HOME_DIR/.ssh"
+  KEY_BODY=$(echo "$PUBKEY" | awk '{print $2}')
+  if grep -qF "$KEY_BODY" "$AUTH" 2>/dev/null; then
+    echo "Deploy key already in $AUTH"
+  else
+    echo "command=\"$RRSYNC $APP_DIR/\",restrict $PUBKEY" >> "$AUTH"
+    chown "$DEPLOY_USER": "$AUTH"; chmod 600 "$AUTH"
+    echo "Added deploy key to $AUTH (locked to $APP_DIR/)"
+  fi
 fi
 
 echo "== Relay service"
