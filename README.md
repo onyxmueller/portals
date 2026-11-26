@@ -23,16 +23,23 @@ crewmate in turn; fling it toward where they're actually sitting. From then on t
 door is on that part of your screen's edge, so you throw at the person. Each phone does this for
 itself, and remembers it. Skip it and the game uses the simpler mapping chosen in Settings.
 
-The captain presses **Launch** when everyone is aboard. Then:
+The journey is three **legs**, flown in order. The captain presses **Launch** when everyone is
+aboard, everyone reads a short briefing (the story so far, and what's new this leg), and the
+captain presses **Go!** Then:
 
 - **Faults** appear in your room with a ring that drains as time runs out, and the part they need
   ("Fire, needs Extinguisher").
 - The part turns up in **someone else's room**, so shout for it. You can also **tap the fault**:
   your crewmates see what you need in a bubble on the door that points at you. They fling it to you; drop it on
   the fault to fix it. A good throw can land straight on the fault.
-- A fault that runs out costs the shared **hull** 15%. At zero the ship is lost. The score is how
-  many faults the crew fixed.
-- Faults come faster, give less time, and use more kinds of part as the score climbs.
+- A fault that runs out costs the shared **hull** 15%. At zero the ship is lost and the captain
+  can try the leg again.
+- Fix enough faults (the bar at the top counts them) and the leg is done. The crew gets one to
+  three **stars** for how much hull is left, and the next launch flies the next leg.
+- Leg 2, the asteroid belt: every so often a hull breach opens in **every room at once**.
+- Leg 3 has a **station**, the Charger, in one room (a ⚡ marks that room's door). Batteries turn
+  up flat. Throw a flat one to the Charger's room; that crewmate leaves it on the Charger and
+  spins a finger round it to crank it full, then throws it on to whoever needs it.
 - Spare parts pile up. Leave one on the **airlock** to throw it away.
 
 Before launch the ship is docked and you can practise throwing. To fling: drag a part and let go.
@@ -48,6 +55,8 @@ everyone):
 
 The status bar shows your round trip to the
 server in milliseconds, and the worst of the last 30 seconds.
+
+Docked, the captain can pick which leg to fly next in Settings.
 
 ## Run it on your own computer
 
@@ -120,13 +129,15 @@ installs the server's packages.
 |---|---|
 | `src/config/settings.js` | Part size, fling speed, friction, colours, the live server's address |
 | `src/config/parts.js` | The parts and the fault each one fixes |
+| `src/config/stations.js` | How each station looks and what you do to work it |
 | `src/deck/Deck.js` | The play area: parts, portals along the edges, dragging, and the throw physics |
 | `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to, including where you pointed |
-| `src/scenes/` | The screens: title, home (start or join a crew), join (type a code), lobby (docked), game (flying), results (ship lost) |
+| `src/scenes/` | The screens: title, home (start or join a crew), join (type a code), lobby (docked), story (briefing before a leg), game (flying), results (leg finished or ship lost) |
 | `src/ui/` | Buttons, sharp text, the Settings panel and the Invite panel (crew code and QR) |
 | `src/net.js` | The connection to the game server |
 | `src/audio/sfx.js` | Sound effects, made in code |
-| `server/server.js` | The game server: serves the page, groups phones into crews, forwards throws, and runs each crew's ship (faults, hull, score). The difficulty numbers are near the top |
+| `server/server.js` | The game server: serves the page, groups phones into crews, forwards throws, and runs each crew's ship (faults, hull, score) |
+| `server/levels.js` | The journey: each leg's story, goal, faults, pace, twist and station. Edit this to change or add legs |
 | `server/scripts/check-relay.mjs` | The check GitHub runs before every deploy |
 | `server/scripts/latency.mjs` | Measures how long a throw takes to travel through a server |
 | `server/setup-server.sh` | One-time server setup |

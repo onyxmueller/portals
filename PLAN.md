@@ -120,7 +120,7 @@ Left for later, on purpose:
 - **Invite links that open the app** when it's installed. That needs the app-store setup from
   Phase 7; until then links always open the web game.
 
-### Phase 3: Where is my crewmate (built except the compass experiment)
+### Phase 3: Where is my crewmate (done)
 
 Each portal on your screen points at the real person.
 
@@ -135,11 +135,11 @@ Each portal on your screen points at the real person.
 without thinking about it.
 
 Built: throw to calibrate (called "Point out your crew" in the game), doors with room icons and
-names, and the request ping (tap your fault). Still to try: the compass experiment, which needs
-real phones in a real room to judge. Where you pointed is already stored as a direction, not a
-spot on the edge, so the compass can turn those directions as the phone turns.
+names, and the request ping (tap your fault). Pointing was tried with real people and works.
+The compass experiment was built, tried on a real phone and shelved: it wasn't clear enough to
+be worth keeping. Where you pointed is stored as a direction, so it could be picked up again.
 
-### Phase 4: Levels and story
+### Phase 4: Levels and story (first 3 legs built)
 
 Start with 3 levels, then grow the campaign.
 
@@ -163,6 +163,12 @@ Start with 3 levels, then grow the campaign.
 - Story panels between levels.
 
 **Done when:** a crew can play 3 different levels in a row with story between them.
+
+Built: three legs with a briefing before each and stars after (Leaving port: fetch and drop;
+Asteroid belt: hull breaches in every room at once; The long dark: the Charger station, where
+flat batteries are cranked full with a spinning finger). Legs live in `server/levels.js`, and
+the goal grows with the crew. Still to do: play it with a real crew and tune the numbers, then
+more legs, more twists (stowaways, nebula, wormhole) and more stations (welder, pump...).
 
 ### Phase 5: Art, music and sound
 

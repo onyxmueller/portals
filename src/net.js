@@ -4,7 +4,7 @@
 //   'left'    I'm no longer in a crew
 //   'error'   joining failed: 'nocrew' (no crew has that code) or 'full'
 //   'room'    the crew or the edge-mapping mode changed
-//   'game'    the ship changed (message has .ev: launch, fault, fixed, lost, over, end)
+//   'game'    the ship changed (message has .ev: brief, launch, fault, burst, fixed, lost, won, over, end)
 //   'throw'   a part is arriving from another phone
 //   'spawn'   the server put a new part in my room
 //   'bounce'  a part I threw had nowhere to go and came back
@@ -16,7 +16,7 @@ import { RELAY } from './config/settings.js';
 
 export const net = new Phaser.Events.EventEmitter();
 
-const freshGame = () => ({ phase: 'lobby', hull: 100, score: 0, faults: [] });
+const freshGame = () => ({ phase: 'lobby', hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], level: null });
 
 export const state = {
   online: false,
@@ -111,7 +111,8 @@ export function connect() {
       reloadIfStale();
     }
     else if (m.t === 'joined') {
-      state.me = m.id; state.crew = m.code; state.game = { ...freshGame(), phase: m.phase };
+      // The full state of the ship follows straight after; until then, wait at the dock.
+      state.me = m.id; state.crew = m.code; state.game = freshGame();
       remember({ code: m.code, token: m.token }); wanted = null;
       net.emit('joined');
     }

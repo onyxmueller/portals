@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { LEVELS, STATIONS, GOAL_PER_EXTRA, STARS } = require('./levels');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // the live server sets 127.0.0.1 and sits behind Apache
@@ -36,7 +37,7 @@ const COLORS = [
 const ASK_GAP = 1500; // a player can call out for a part at most this often (ms)
 const MODES = ['neighbors', 'portals'];
 
-// code -> { code, mode, captain, players: [{ id, name, color, token, ws, away, awaySince }], game }
+// code -> { code, mode, captain, level (which leg of levels.js is next), players: [{ id, name, color, token, ws, away, awaySince }], game }
 // A player with ws === null is "away": cut off, but their room is held for AWAY_GRACE.
 const crews = new Map();
 const conns = new Set(); // every open connection: { ws, crew, player, lastHeard, from, device }
@@ -66,23 +67,31 @@ function broadcastRoom(crew) {
 }
 
 // ---------- the ship ----------
-// Tuning. Times are in milliseconds.
-const PART_KINDS = 8;        // how many kinds of part/fault exist (names and pictures are in src/config/parts.js)
-const START_KINDS = 4;       // kinds in play at launch; one more joins every 4 fixes
+// The journey is a list of legs (levels.js). The ship moves through these states:
+//   lobby  docked, the crew gathers
+//   story  the briefing for the next leg; the captain says go
+//   run    flying: faults appear and the crew fixes them
+//   won    the leg's goal was reached
+//   over   the hull gave out
+// Tuning that applies to every leg. Each leg's own numbers are in levels.js.
 const MAX_FAULTS_EACH = 2;   // a room never has more than this many faults at once
 const HULL_DAMAGE = 15;      // hull lost when a fault runs out (hull starts at 100)
-const FAULT_TIME = { start: 20000, min: 12000, perFix: 400 };  // how long you get to fix a fault
-const FAULT_GAP = { start: 6000, min: 2500, perFix: 150 };     // time between new faults (for 2 players)
 const DECOY_CHANCE = 0.25;   // chance a new fault also drops a useless spare part somewhere
+const TEST_GOAL = Number(process.env.TEST_GOAL) || 0; // the check script shortens every leg with this
 
-const newGame = () => ({ phase: 'lobby', hull: 100, score: 0, faults: [], nextFaultAt: 0, seq: 1 });
+const newGame = (phase = 'lobby') => ({ phase, hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], nextFaultAt: 0, nextBurstAt: 0, seq: 1 });
+// The leg the ship is on. A finished leg stays on screen while crew.level already points at the next one.
+const legOf = (crew) => crew.game.level ?? crew.level;
+const levelOf = (crew) => LEVELS[legOf(crew)];
 
-// The whole ship state. `ev` says what just happened (launch, fault, fixed, lost, over, end)
-// and `who` is the room it happened in.
+// The whole ship state. `ev` says what just happened (brief, launch, fault, burst, fixed, lost,
+// won, over, end) and `who` is the room it happened in.
 function gameMsg(crew, ev, who) {
-  const g = crew.game, now = Date.now();
+  const g = crew.game, now = Date.now(), lv = levelOf(crew);
   return {
-    t: 'game', phase: g.phase, hull: g.hull, score: g.score, ev, who,
+    t: 'game', phase: g.phase, hull: g.hull, score: g.score, goal: g.goal, stars: g.stars, ev, who,
+    level: { n: legOf(crew), of: LEVELS.length, name: lv.name, story: lv.story, tip: lv.tip, won: lv.won, station: lv.station || null },
+    stations: g.stations,
     faults: g.faults.map((f) => ({ id: f.id, owner: f.owner, kind: f.kind, ttl: f.ttl, left: Math.max(0, f.deadline - now) })),
   };
 }
@@ -92,28 +101,74 @@ function broadcastGame(crew, ev, who) {
   for (const p of crew.players) send(p.ws, msg);
 }
 
+// Start flying the crew's current leg.
+function startLeg(crew) {
+  const lv = levelOf(crew), g = crew.game = newGame('run'), now = Date.now();
+  g.goal = TEST_GOAL || lv.goal + Math.max(0, aboard(crew).length - 2) * GOAL_PER_EXTRA;
+  g.nextFaultAt = now + 1000;
+  g.nextBurstAt = lv.burst ? now + lv.burst.first : 0;
+  placeStations(crew);
+  broadcastGame(crew, 'launch');
+}
+
+// Every station this leg needs lives in the room of someone who is aboard. Returns true if
+// anything moved (a station's crewmate dropped out, so it went to someone else).
+function placeStations(crew) {
+  const g = crew.game, lv = levelOf(crew), here = aboard(crew);
+  if (g.phase !== 'run' || !lv.station || !here.length) return false;
+  const has = g.stations[0] && here.find((p) => p.id === g.stations[0].owner);
+  if (has) return false;
+  const owner = here.find((p) => p.name === STATIONS[lv.station].room) || pick(here);
+  g.stations = [{ type: lv.station, owner: owner.id }];
+  return true;
+}
+
 function spawnPart(crew, player, kind) {
   send(player.ws, { t: 'spawn', item: { id: `s${crew.game.seq++}`, kind } });
 }
 
+// Give `owner` a fault of this kind, and put the part for it in someone else's room.
+function addFaultFor(crew, owner, kind) {
+  const g = crew.game, lv = levelOf(crew), here = aboard(crew);
+  g.faults.push({ id: g.seq++, owner: owner.id, kind, ttl: lv.time, deadline: Date.now() + lv.time });
+
+  // If a station makes this part, what turns up is the thing the station works on, and never
+  // in the station's own room when there's a choice: it has to be thrown there.
+  const station = g.stations.find((s) => STATIONS[s.type].gives === kind);
+  let where = here.filter((p) => p !== owner);
+  if (station) {
+    const away = here.filter((p) => p.id !== station.owner);
+    const best = away.filter((p) => p !== owner);
+    where = best.length ? best : away.length ? away : here;
+    kind = STATIONS[station.type].takes;
+  }
+  spawnPart(crew, where.length ? pick(where) : owner, kind);
+}
+
+const freeRooms = (crew) => aboard(crew).filter((p) => crew.game.faults.filter((f) => f.owner === p.id).length < MAX_FAULTS_EACH);
+
 function addFault(crew) {
-  const g = crew.game, now = Date.now(), here = aboard(crew);
-  const free = here.filter((p) => g.faults.filter((f) => f.owner === p.id).length < MAX_FAULTS_EACH);
+  const g = crew.game, lv = levelOf(crew), here = aboard(crew), free = freeRooms(crew);
+  g.nextFaultAt = Date.now() + lv.gap / Math.max(1, here.length / 2); // bigger crews get faults faster
   if (!free.length) return;
   const owner = pick(free);
-  const kinds = Math.min(PART_KINDS, START_KINDS + Math.floor(g.score / 4));
-  const kind = Math.floor(Math.random() * kinds);
-  const ttl = Math.max(FAULT_TIME.min, FAULT_TIME.start - g.score * FAULT_TIME.perFix);
-  g.faults.push({ id: g.seq++, owner: owner.id, kind, ttl, deadline: now + ttl });
-
-  // The part that fixes it turns up in a different room, so the crew has to talk.
-  const others = here.filter((p) => p !== owner);
-  spawnPart(crew, others.length ? pick(others) : owner, kind);
-  if (Math.random() < DECOY_CHANCE) spawnPart(crew, pick(here), Math.floor(Math.random() * kinds));
-
-  const gap = Math.max(FAULT_GAP.min, FAULT_GAP.start - g.score * FAULT_GAP.perFix);
-  g.nextFaultAt = now + gap / Math.max(1, here.length / 2); // bigger crews get faults faster
+  addFaultFor(crew, owner, pick(lv.kinds));
+  if (Math.random() < DECOY_CHANCE) {
+    // A spare nobody asked for. Never one a station makes, or it would be a free pass.
+    const spares = lv.kinds.filter((k) => !g.stations.some((s) => STATIONS[s.type].gives === k));
+    if (spares.length) spawnPart(crew, pick(here), pick(spares));
+  }
   broadcastGame(crew, 'fault', owner.id);
+}
+
+// Something hits the whole ship: every room that has space gets the same fault at once.
+function addBurst(crew) {
+  const g = crew.game, lv = levelOf(crew);
+  g.nextBurstAt = Date.now() + lv.burst.every;
+  const free = freeRooms(crew);
+  if (!free.length) return;
+  for (const p of free) addFaultFor(crew, p, lv.burst.kind);
+  broadcastGame(crew, 'burst');
 }
 
 function tick(crew) {
@@ -126,6 +181,7 @@ function tick(crew) {
     if (g.hull <= 0) { g.phase = 'over'; g.faults = []; broadcastGame(crew, 'over'); return; }
     broadcastGame(crew, 'lost', expired[0].owner);
   }
+  if (g.nextBurstAt && now >= g.nextBurstAt) addBurst(crew);
   if (now >= g.nextFaultAt) addFault(crew);
 }
 setInterval(() => { for (const crew of crews.values()) tick(crew); }, 250);
@@ -176,6 +232,7 @@ function goAway(crew, player) {
   player.ws = null; player.away = true; player.awaySince = Date.now();
   crew.game.faults = crew.game.faults.filter((f) => f.owner !== player.id);
   fixCaptain(crew);
+  placeStations(crew);
   broadcastRoom(crew); broadcastGame(crew);
   log(crew, `~ ${player.name} went away`);
 }
@@ -186,7 +243,7 @@ function remove(crew, player, why) {
   crew.game.faults = crew.game.faults.filter((f) => f.owner !== player.id);
   fixCaptain(crew);
   if (!crew.players.length) crews.delete(crew.code);
-  else { broadcastRoom(crew); broadcastGame(crew); }
+  else { placeStations(crew); broadcastRoom(crew); broadcastGame(crew); }
   log(crew, `- ${player.name} ${why}`);
 }
 
@@ -266,7 +323,7 @@ wss.on('connection', (ws, req) => {
       if (conn.player) remove(conn.crew, conn.player, 'left for another crew');
       conn.crew = null; conn.player = null;
       if (m.t === 'create') {
-        const crew = { code: newCode(), mode: 'neighbors', captain: null, players: [], game: newGame() };
+        const crew = { code: newCode(), mode: 'neighbors', captain: null, level: 0, players: [], game: newGame() };
         crews.set(crew.code, crew);
         seat(conn, crew);
         return;
@@ -295,11 +352,15 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'mode' && MODES.includes(m.mode)) {
       crew.mode = m.mode;
       broadcastRoom(crew);
-    } else if (m.t === 'launch' && captain && crew.game.phase !== 'run') {
-      crew.game = newGame();
-      crew.game.phase = 'run';
-      crew.game.nextFaultAt = Date.now() + 1000;
-      broadcastGame(crew, 'launch');
+    } else if (m.t === 'launch' && captain && ['lobby', 'won'].includes(crew.game.phase)) {
+      // Show everyone the briefing for the next leg.
+      crew.game = newGame('story');
+      broadcastGame(crew, 'brief');
+    } else if (m.t === 'go' && captain && ['story', 'over'].includes(crew.game.phase)) {
+      startLeg(crew); // from the briefing, or straight back in after losing the ship
+    } else if (m.t === 'level' && captain && crew.game.phase === 'lobby' && LEVELS[m.n]) {
+      crew.level = m.n; // the captain picks which leg to fly next
+      broadcastGame(crew);
     } else if (m.t === 'end' && captain) {
       crew.game = newGame();
       broadcastGame(crew, 'end');
@@ -316,7 +377,12 @@ wss.on('connection', (ws, req) => {
       if (!fault) return; // already ran out
       g.faults = g.faults.filter((f) => f !== fault);
       g.score++;
-      broadcastGame(crew, 'fixed', player.id);
+      if (g.score < g.goal) { broadcastGame(crew, 'fixed', player.id); return; }
+      // Leg finished. Stars are for how much hull is left; the next launch flies the next leg.
+      g.phase = 'won'; g.faults = []; g.level = crew.level;
+      g.stars = g.hull >= STARS.three ? 3 : g.hull >= STARS.two ? 2 : 1;
+      broadcastGame(crew, 'won', player.id);
+      crew.level = (crew.level + 1) % LEVELS.length;
     }
   });
 

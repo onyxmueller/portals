@@ -7,6 +7,7 @@
 import { view } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
 import { PARTS } from '../config/parts.js';
+import { STATIONS } from '../config/stations.js';
 import { net, state, send, connected, mySelf, others } from '../net.js';
 import { portals, portalAt, portalFrom, stripPos, stripPoint, edgeOf } from '../throw/edges.js';
 import { text, emoji, hex } from '../ui/widgets.js';
@@ -22,12 +23,13 @@ let bannerShownFor = null; // the "Your room is..." banner shows once per room c
 export class Deck {
   constructor(scene) {
     this.scene = scene;
-    this.items = [];        // { id, kind, x, y, vx, vy, state: 'in'|'entering'|'leaving', age, held, view, disc }
+    this.items = [];        // { id, kind, x, y, vx, vy, state: 'in'|'entering'|'leaving', age, held, docked, view, disc, pic }
+                            // a "docked" part is sitting on a station: it stays put and can't be picked up
                             // a "badge" item has .badge = a crewmate instead of .kind (see the lobby)
     this.drags = new Map(); // pointer id -> { it, ox, oy, samples: [{ x, y, t }] }
     this.onStep = null;     // the game scene hooks in here to check faults and the airlock
     this.onBadge = null;    // called with (crewmate, x, y) when a badge is flung off an edge
-    this.onTap = null;      // called with (x, y) when a finger goes down on empty deck
+    this.onTap = null;      // called with (x, y, pointer) when a finger goes down on empty deck
     this.hidePortals = false;
 
     this.tint = scene.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setDepth(0);
@@ -73,6 +75,7 @@ export class Deck {
     it.base = it.badge ? hex(it.badge.color) : COLORS.button;
     it.disc = this.scene.add.circle(0, 0, R, it.base);
     const pic = emoji(this.scene, 0, 2, it.badge ? it.badge.icon : PARTS[it.kind].e, R * 1.15);
+    it.pic = pic;
     it.view = this.scene.add.container(it.x, it.y, [it.disc, pic]).setDepth(5);
     this.items.push(it);
     return it;
@@ -84,6 +87,12 @@ export class Deck {
     for (const [id, d] of this.drags) if (d.it === it) this.drags.delete(id);
   }
 
+  // Turn a part into a different part (a station has finished working on it).
+  setKind(it, kind) {
+    it.kind = kind;
+    it.pic.setText(PARTS[kind].e);
+  }
+
   clear() {
     for (const it of [...this.items]) this.remove(it);
   }
@@ -93,7 +102,7 @@ export class Deck {
     const { W, H } = view;
     return this.add({
       id: `${state.me}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
-      kind: Math.floor(Math.random() * PARTS.length),
+      kind: Math.floor(Math.random() * PARTS.filter((p) => p.fault).length),
       x: W * (0.25 + Math.random() * 0.5), y: H * (0.54 + Math.random() * 0.26),
     });
   }
@@ -200,7 +209,7 @@ export class Deck {
     const decay = Math.exp(-SETTINGS.friction * dt), B = -SETTINGS.bounce;
     for (const it of this.items) {
       it.age += dt;
-      if (it.held) continue;
+      if (it.held || it.docked) continue;
       it.x += it.vx * dt; it.y += it.vy * dt;
       it.vx *= decay; it.vy *= decay;
 
@@ -226,12 +235,13 @@ export class Deck {
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
       if (d >= 2 * R || d === 0) continue;
       const nx = dx / d, ny = dy / d, push = (2 * R - d) / 2;
-      if (!a.held) { a.x -= nx * push; a.y -= ny * push; }
-      if (!b.held) { b.x += nx * push; b.y += ny * push; }
+      const af = a.held || a.docked, bf = b.held || b.docked; // fixed in place: the other one moves
+      if (!af) { a.x -= nx * push; a.y -= ny * push; }
+      if (!bf) { b.x += nx * push; b.y += ny * push; }
       const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
       if (rel < 0) {
-        if (!a.held) { a.vx += rel * nx; a.vy += rel * ny; }
-        if (!b.held) { b.vx -= rel * nx; b.vy -= rel * ny; }
+        if (!af) { a.vx += rel * nx; a.vy += rel * ny; }
+        if (!bf) { b.vx -= rel * nx; b.vy -= rel * ny; }
       }
     }
 
@@ -255,10 +265,10 @@ export class Deck {
     if (over.length) return; // the finger is on a button or a panel
     let hit = null;
     for (const it of this.items) {
-      if (it.state !== 'in' || it.held) continue;
+      if (it.state !== 'in' || it.held || it.docked) continue;
       if (Math.hypot(pointer.worldX - it.x, pointer.worldY - it.y) <= R * 1.35) hit = it;
     }
-    if (!hit) { if (this.onTap) this.onTap(pointer.worldX, pointer.worldY); return; }
+    if (!hit) { if (this.onTap) this.onTap(pointer.worldX, pointer.worldY, pointer); return; }
     hit.held = true; hit.vx = hit.vy = 0;
     this.items.splice(this.items.indexOf(hit), 1); this.items.push(hit);
     this.scene.children.bringToTop(hit.view);
@@ -295,7 +305,7 @@ export class Deck {
   // How far in from the top edge things must sit to clear the notch.
   static topInset() { return Math.max(0, view.safeTop - 8); }
 
-  // Call when the crew, the mode, where I pointed or the screen size changes.
+  // Call when the crew, the mode, where I pointed, the stations or the screen size changes.
   refresh() {
     const { W, H } = view, self = mySelf(), o = others();
 
@@ -336,6 +346,13 @@ export class Deck {
       if (top) name.setOrigin(0, 0.5).setPosition(dx + DOOR + 6, dy);
       else name.setRotation(m.nx < 0 ? -Math.PI / 2 : Math.PI / 2).setPosition(dx, dy + DOOR + 8 + name.width / 2);
       this.portalBits.push(name);
+      // A station in their room this leg: a small marker on the far side of the door from the name.
+      const station = (state.game.stations || []).find((s) => s.owner === p.id);
+      if (station && STATIONS[station.type]) {
+        const sx = top ? dx - DOOR - 13 : dx, sy = top ? dy : dy - DOOR - 13;
+        g.fillStyle(COLORS.warn, alpha).fillCircle(sx, sy, 11);
+        this.portalBits.push(emoji(this.scene, sx, sy + 1, STATIONS[station.type].icon, 13).setDepth(2));
+      }
       this.doors.set(p.id, { x: dx, y: dy, nx: m.nx, ny: m.ny });
     }
 

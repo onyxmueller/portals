@@ -7,7 +7,7 @@ import WebSocket from 'ws';
 
 const PORT = 39011;
 const server = spawn(process.execPath, [fileURLToPath(new URL('../server.js', import.meta.url))], {
-  env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' },
+  env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', TEST_GOAL: '2' }, // every leg is 2 faults long
   stdio: 'ignore',
 });
 
@@ -73,6 +73,7 @@ try {
   const before = a.log.length;
   x.say({ t: 'throw', to: idB, mode: 'neighbors', edge: 'R', u: 0.5, vx: 900, vy: 0, item: { id: 'z', kind: 0 } });
   x.say({ t: 'launch' });
+  x.say({ t: 'go' });
   await wait(300);
   check('crews cannot throw into each other', !b.log.some((m) => m.t === 'throw') && x.log.some((m) => m.t === 'bounce'));
   check("one crew launching doesn't launch another", a.last('game').phase === 'lobby' && x.last('game').phase === 'run');
@@ -97,9 +98,16 @@ try {
   await wait(200);
   check('only the captain can launch', a.last('game').phase === 'lobby');
   a.say({ t: 'launch' });
+  await wait(200);
+  const brief = b.last('game');
+  check('launch shows the briefing for the first leg', brief.phase === 'story' && brief.level.n === 0 && brief.level.story.length > 0);
+  b.say({ t: 'go' });
+  await wait(200);
+  check('only the captain can say go', a.last('game').phase === 'story');
+  a.say({ t: 'go' });
   await wait(1600);
   const fault = a.last('game').faults[0];
-  check('launch starts the game and a fault appears', b.last('game').phase === 'run' && !!fault);
+  check('go starts the leg and a fault appears', b.last('game').phase === 'run' && !!fault);
   if (fault) {
     const owner = fault.owner === idA ? a : b, other = owner === a ? b : a;
     check('the part to fix it appears in the other room', other.log.some((m) => m.t === 'spawn' && m.item.kind === fault.kind));
@@ -129,9 +137,36 @@ try {
   check('it comes back to the same room', !!back && back.id === idB && names(a) === 'Engine,Bridge');
   check('and straight into the running game', back?.phase === 'run' && b2.last('game').phase === 'run');
 
+  // ---- finishing a leg ----
+  let last;
+  for (let i = 0; i < 40 && !(last = a.last('game').faults[0]); i++) await wait(250);
+  (last.owner === idA ? a : b2).say({ t: 'fix', id: last.id });
+  await wait(200);
+  const won = b2.last('game');
+  check('reaching the goal finishes the leg with stars', won.phase === 'won' && won.stars >= 1 && won.level.n === 0);
+  a.say({ t: 'launch' });
+  await wait(200);
+  check('the next launch briefs the next leg', b2.last('game').phase === 'story' && b2.last('game').level.n === 1);
   a.say({ t: 'end' });
   await wait(200);
   check('ending returns to dock', b2.last('game').phase === 'lobby');
+
+  // ---- stations ----
+  const seenA = a.log.length, seenB = b2.log.length; // only spawns from this leg count
+  const spawned = (kind) => [[a, seenA, idA], [b2, seenB, idB]].filter(([p, from]) => p.log.slice(from).some((m) => m.t === 'spawn' && m.item.kind === kind)).map(([, , id]) => id);
+  a.say({ t: 'level', n: 2 });
+  a.say({ t: 'launch' });
+  a.say({ t: 'go' });
+  await wait(300);
+  const flying = b2.last('game');
+  check('the captain can pick a leg, and its station is in someone\'s room',
+    flying.level.n === 2 && flying.stations.length === 1 && [idA, idB].includes(flying.stations[0].owner));
+  for (let i = 0; i < 240 && !a.last('game').faults.some((f) => f.kind === 1); i++) await wait(250);
+  await wait(200);
+  check('a fault that needs a battery sends a flat one, away from the charger',
+    spawned(8).length > 0 && !spawned(8).includes(flying.stations[0].owner) && spawned(1).length === 0);
+  a.say({ t: 'end' });
+  await wait(200);
 
   // ---- the captain leaves ----
   a.say({ t: 'leave' });

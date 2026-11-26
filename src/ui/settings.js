@@ -52,8 +52,21 @@ export function openSettings(scene) {
   stepper('Friction', 'friction', 0.2, 0, 5, (v) => v.toFixed(1));
   y += 10;
 
-  // Docked: practice parts. Flying: the captain can end the game.
+  // Docked: the captain picks which leg of the journey to fly next.
   const docked = state.game.phase === 'lobby';
+  let paintLeg = () => {};
+  if (docked && isCaptain() && state.game.level) {
+    heading('JOURNEY (CAPTAIN)');
+    const t = text(scene, -pw / 2 + 18, y, '', { size: 13 }).setOrigin(0, 0.5);
+    paintLeg = () => { const lv = state.game.level; t.setText(`Next leg: ${lv.n + 1}, ${lv.name}`); };
+    const pick = (d) => { const lv = state.game.level; send({ t: 'level', n: (lv.n + d + lv.of) % lv.of }); };
+    panel.add(t);
+    place(button(scene, '−', () => pick(-1), { w: 44, h: 34 }), pw / 2 - 18 - 44 - 8 - 22);
+    place(button(scene, '+', () => pick(1), { w: 44, h: 34 }), pw / 2 - 18 - 22);
+    y += 54;
+  }
+
+  // Docked: practice parts. Flying: the captain can end the game.
   if (docked) place(button(scene, '+ Practice part', () => scene.deck.spawnRandom(), { w: half }), -half / 2 - 4);
   else place(button(scene, 'End game', () => { send({ t: 'end' }); close(); }, { w: half }).setVisible(isCaptain()), -half / 2 - 4);
   place(button(scene, 'Clear my parts', () => scene.deck.clear(), { w: half }), half / 2 + 4);
@@ -70,6 +83,7 @@ export function openSettings(scene) {
     neighbors.setOn(state.mode === 'neighbors');
     portals.setOn(state.mode === 'portals');
     help.setText(HELP[state.mode]);
+    paintLeg();
   };
   function close() {
     net.off('room', sync); net.off('game', sync);

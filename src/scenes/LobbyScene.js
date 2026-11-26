@@ -37,7 +37,8 @@ export class LobbyScene extends Phaser.Scene {
     this.cancel = button(this, 'Cancel', () => this.stopPointing(false));
 
     net.on('room', this.onRoom, this);
-    this.events.once('shutdown', () => net.off('room', this.onRoom, this));
+    net.on('game', this.layout, this); // the captain may pick a different leg
+    this.events.once('shutdown', () => { net.off('room', this.onRoom, this); net.off('game', this.layout, this); });
     this.seeded = false;
     this.seed();
 
@@ -142,10 +143,11 @@ export class LobbyScene extends Phaser.Scene {
       return t;
     });
 
-    const alone = others().length === 0;
-    this.hint.setPosition(W / 2, y + 12).setText(
-      alone ? '' : isCaptain() ? 'Press Launch when everyone is aboard.' : `${captainName()} launches when everyone is aboard.`);
-    this.point.setPosition(W / 2, y + 52).setVisible(!alone).setLabel(hasAim() ? 'Point out your crew again' : 'Point out your crew');
+    const alone = others().length === 0, lv = state.game.level;
+    this.hint.setPosition(W / 2, y + 20).setText(
+      (lv ? `Next: leg ${lv.n + 1}, ${lv.name}\n` : '') +
+      (alone ? '' : isCaptain() ? 'Press Launch when everyone is aboard.' : `${captainName()} launches when everyone is aboard.`));
+    this.point.setPosition(W / 2, y + 66).setVisible(!alone).setLabel(hasAim() ? 'Point out your crew again' : 'Point out your crew');
 
     this.launch.setVisible(isCaptain());
     rowFromRight([this.invite, this.launch, this.settings], W - 10, H - safeBottom - 28);

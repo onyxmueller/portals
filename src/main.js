@@ -7,6 +7,7 @@ import { HomeScene } from './scenes/HomeScene.js';
 import { JoinScene } from './scenes/JoinScene.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { GameScene } from './scenes/GameScene.js';
+import { StoryScene } from './scenes/StoryScene.js';
 import { ResultsScene } from './scenes/ResultsScene.js';
 
 measure();
@@ -24,7 +25,7 @@ window.game = new Phaser.Game({
   scale: { mode: Phaser.Scale.NONE, width, height, zoom: 1 / DPR },
   input: { activePointers: 4 }, // several fingers can drag parts at once
   disableContextMenu: true,
-  scene: [TitleScene, HomeScene, JoinScene, LobbyScene, GameScene, ResultsScene],
+  scene: [TitleScene, HomeScene, JoinScene, LobbyScene, StoryScene, GameScene, ResultsScene],
 });
 
 window.addEventListener('resize', () => {
