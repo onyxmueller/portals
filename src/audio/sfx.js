@@ -29,4 +29,5 @@ export const sfx = {
   fix: () => blip(660, 1320),
   damage: () => blip(200, 90),
   airlock: () => blip(300, 120),
+  strike: () => { blip(160, 320); setTimeout(() => blip(320, 160), 110); }, // asteroids: a rumble, not the hull-damage sound
 };

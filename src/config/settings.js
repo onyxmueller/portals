@@ -19,16 +19,29 @@ export const SITE = 'https://portals.onyxmueller.net';
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ'; // the letters crew codes are made of (matches the server)
 export const CODE_LENGTH = 4;
 
+// The look: deep teal, cream and mustard, like a space-age travel poster. Numbers (0x...) are
+// for shapes, strings ('#...') are for text. Two rules the screens keep to:
+//   - only things you can pick up are cream discs with a hard shadow
+//   - coral (`bad`) is only ever about the hull: about to be lost, or just lost
 export const COLORS = {
-  background: 0x14161c,
-  panel: 0x1f222b,
-  button: 0x2b2f3a,
-  buttonDown: 0x3d4250,
-  line: 0x3d4250,
-  text: '#e9ecef',
-  dim: '#adb5bd',
-  faint: '#868e96',
-  good: 0x69db7c,
+  background: 0x123c42,
+  panel: 0x0b2a2f,      // the darker teal behind panels, rings and rows
+  shadow: 0x061c20,     // hard shadows, and holes
+  button: 0x1d4d54,
+  buttonDown: 0x2b6168,
+  line: 0x5d8f8c,
+  cream: 0xf6ecd6,
+  ink: 0x123c42,        // pictures and words drawn on cream or on a room's colour
+  planet: 0xe9a23b,
+  text: '#f6ecd6',
+  dim: '#a9c9c4',
+  faint: '#8fb5b0',
+  inkCss: '#123c42',
+  onPlanet: '#3a1a05',  // words on the planet strip at the bottom
+  good: 0x7be08d,
   warn: 0xffd43b,
-  bad: 0xff6b6b,
+  bad: 0xff7a52,
+  goodCss: '#7be08d',
+  warnCss: '#ffd43b',
+  badCss: '#ff8f6b',
 };

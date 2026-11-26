@@ -20,17 +20,17 @@ export class JoinScene extends Phaser.Scene {
     setupCamera(this);
     this.code = '';
     this.busy = false;
-    this.heading = text(this, 0, 0, 'Enter the crew code', { size: 20, weight: '600' });
+    this.heading = text(this, 0, 0, 'Enter the crew code', { size: 20, weight: '700' });
     this.boxG = this.add.graphics();
-    this.letters = Array.from({ length: CODE_LENGTH }, () => text(this, 0, 0, '', { size: 34, weight: '800' }));
-    this.note = text(this, 0, 0, '', { size: 14, color: '#ff6b6b' });
+    this.letters = Array.from({ length: CODE_LENGTH }, () => text(this, 0, 0, '', { size: 34, weight: '900' }));
+    this.note = text(this, 0, 0, '', { size: 14, color: COLORS.warnCss });
     this.keys = [...CODE_LETTERS].map((ch) => button(this, ch, () => this.type(ch), { w: 54, h: 50 }));
     this.del = button(this, '⌫ Delete', () => this.type(null), { w: 130, h: 46 });
     this.back = button(this, 'Back', () => this.scene.start('Home'), { w: 130, h: 46 });
 
     const onError = (why) => {
       this.busy = false; this.code = '';
-      this.note.setColor('#ff6b6b').setText(WHY[why] || "Couldn't join that crew.");
+      this.note.setColor(COLORS.warnCss).setText(WHY[why] || "Couldn't join that crew.");
       this.paint();
     };
     net.on('error', onError);
@@ -63,9 +63,10 @@ export class JoinScene extends Phaser.Scene {
     const { bw, bh, y, xs } = this.boxes(), g = this.boxG;
     g.clear();
     xs.forEach((x, i) => {
-      g.fillStyle(COLORS.button, 1).fillRoundedRect(x, y, bw, bh, 10);
-      g.lineStyle(2, i === this.code.length ? 0xffd43b : COLORS.line, 1).strokeRoundedRect(x, y, bw, bh, 10);
-      this.letters[i].setText(this.code[i] || '').setPosition(x + bw / 2, y + bh / 2);
+      // Tickets, like the crew code in the lobby: cream once filled, outlined in yellow where the next letter goes.
+      g.fillStyle(this.code[i] ? COLORS.cream : COLORS.panel, 1).fillRect(x, y, bw, bh);
+      if (i === this.code.length) g.lineStyle(3, COLORS.warn, 1).strokeRect(x, y, bw, bh);
+      this.letters[i].setColor(COLORS.inkCss).setText(this.code[i] || '').setPosition(x + bw / 2, y + bh / 2);
     });
   }
 

@@ -19,8 +19,8 @@ export function openInvite(scene) {
   const panel = scene.add.container(W / 2, 0).setDepth(20);
   let y = 26;
 
-  panel.add(text(scene, 0, y, 'CREW CODE', { size: 12, color: COLORS.faint })); y += 40;
-  panel.add(text(scene, 0, y, state.crew.split('').join(' '), { size: 46, weight: '800' })); y += 44;
+  panel.add(text(scene, 0, y, 'Crew code', { size: 13, color: COLORS.dim })); y += 40;
+  panel.add(text(scene, 0, y, state.crew.split('').join(' '), { size: 46, weight: '900', spacing: 2 })); y += 44;
 
   // QR code, drawn square by square on a white card.
   const qr = qrcode(0, 'M');
@@ -42,8 +42,8 @@ export function openInvite(scene) {
     const result = await share(link, `Join my crew on Portals! Code: ${state.crew}`);
     if (result === 'copied') shareBtn.setLabel('Link copied');
     else if (result === 'failed') shareBtn.setLabel(link.replace(/^https?:\/\//, ''));
-  }, { w: pw - 60, h: 48 });
-  panel.add(shareBtn); shareBtn.setPosition(0, y); y += 44;
+  }, { w: pw - 60, h: 48, kind: 'outline' });
+  panel.add(shareBtn); shareBtn.setPosition(0, y); y += 50;
 
   const bg = scene.add.rectangle(0, y / 2, pw, y, COLORS.panel, 0.98).setStrokeStyle(1, COLORS.line).setInteractive();
   panel.addAt(bg, 0);

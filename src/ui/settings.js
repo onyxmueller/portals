@@ -16,7 +16,7 @@ export function openSettings(scene) {
   const pw = Math.min(W - 20, 360), half = (pw - 40) / 2;
   const blocker = scene.add.rectangle(0, 0, W, H, 0x000000, 0.5).setOrigin(0).setDepth(19).setInteractive();
   const panel = scene.add.container(W / 2, 0).setDepth(20);
-  let y = 22;
+  let y = 30;
   const heading = (s) => { panel.add(text(scene, 0, y, s, { size: 12, color: COLORS.faint })); y += 28; };
   const place = (b, x) => { panel.add(b); b.setPosition(x, y); return b; };
 
@@ -29,7 +29,7 @@ export function openSettings(scene) {
   y += 44;
   // If this phone has pointed out where its crewmates sit, that wins over the choice above.
   if (hasAim()) {
-    panel.add(text(scene, 0, y - 6, 'This phone is using where you pointed instead.', { size: 12, color: '#ffd43b' }));
+    panel.add(text(scene, 0, y - 6, 'This phone is using where you pointed instead.', { size: 12, color: COLORS.warnCss }));
     y += 26;
     place(button(scene, 'Forget where I pointed', () => { setAim(null); scene.deck.refresh(); close(); }, { w: pw - 32, h: 36 }), 0);
     y += 44;

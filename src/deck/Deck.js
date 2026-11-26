@@ -10,12 +10,14 @@ import { PARTS } from '../config/parts.js';
 import { STATIONS } from '../config/stations.js';
 import { net, state, send, connected, mySelf, others } from '../net.js';
 import { portals, portalAt, portalFrom, stripPos, stripPoint, edgeOf } from '../throw/edges.js';
-import { text, emoji, hex } from '../ui/widgets.js';
+import { text, icon, hex } from '../ui/widgets.js';
+import { roomIcon } from '../ui/icons.js';
 import { sfx, initAudio } from '../audio/sfx.js';
 import { buzz } from '../native.js';
 
 const R = SETTINGS.partRadius;
-const DOOR = 19;          // radius of the round "door" drawn on each portal
+const DOOR = 46;          // radius of the half-round "door" that pokes in from the edge for each crewmate
+const PLANET = 100;       // how far the planet strip rises from the bottom of the screen
 const BADGE_SPEED = 150;  // how fast a badge must leave the screen to count as pointing (gentler than a throw)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let bannerShownFor = null; // the "Your room is..." banner shows once per room colour
@@ -32,13 +34,12 @@ export class Deck {
     this.onTap = null;      // called with (x, y, pointer) when a finger goes down on empty deck
     this.hidePortals = false;
 
-    this.tint = scene.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setDepth(0);
+    this.backG = scene.add.graphics().setDepth(0); // the backdrop: an orbit line, and a planet along the bottom
     this.portalG = scene.add.graphics().setDepth(2);
     this.portalBits = [];   // the icons and names drawn on the portals
     this.doors = new Map(); // player id -> where their door is, for speech bubbles: { x, y, nx, ny }
-    this.waiting = text(scene, 0, 0, '', { size: 15, color: COLORS.faint }).setDepth(2);
-    this.dot = scene.add.circle(0, 0, 7, 0x555555).setDepth(10);
-    this.status = text(scene, 0, 0, '', { size: 13, color: COLORS.dim, align: 'left' }).setOrigin(0, 0.5).setDepth(10);
+    this.waiting = text(scene, 0, 0, '', { size: 14, color: COLORS.dim }).setDepth(2);
+    this.status = text(scene, 0, 0, '', { size: 13, weight: '700', color: COLORS.onPlanet }).setDepth(10);
 
     scene.input.on('pointerdown', this.onDown, this);
     scene.input.on('pointermove', this.onMove, this);
@@ -72,11 +73,12 @@ export class Deck {
   // ---------- parts ----------
   add(it) {
     it.vx ??= 0; it.vy ??= 0; it.state ??= 'in'; it.age = 0; it.held = false;
-    it.base = it.badge ? hex(it.badge.color) : COLORS.button;
-    it.disc = this.scene.add.circle(0, 0, R, it.base);
-    const pic = emoji(this.scene, 0, 2, it.badge ? it.badge.icon : PARTS[it.kind].e, R * 1.15);
-    it.pic = pic;
-    it.view = this.scene.add.container(it.x, it.y, [it.disc, pic]).setDepth(5);
+    // Anything you can pick up is a disc with a hard shadow, and nothing else on screen is.
+    // Parts are cream; a badge (pointing out the crew) is its crewmate's colour.
+    it.shadow = this.scene.add.circle(5, 5, R, COLORS.shadow);
+    it.disc = this.scene.add.circle(0, 0, R, it.badge ? hex(it.badge.color) : COLORS.cream);
+    it.pic = icon(this.scene, 0, 0, it.badge ? roomIcon(it.badge.name) : PARTS[it.kind].icon, R * 1.15);
+    it.view = this.scene.add.container(it.x, it.y, [it.shadow, it.disc, it.pic]).setDepth(5);
     this.items.push(it);
     return it;
   }
@@ -90,7 +92,7 @@ export class Deck {
   // Turn a part into a different part (a station has finished working on it).
   setKind(it, kind) {
     it.kind = kind;
-    it.pic.setText(PARTS[kind].e);
+    it.pic.setTexture(`icon-${PARTS[kind].icon}`);
   }
 
   clear() {
@@ -105,6 +107,14 @@ export class Deck {
       kind: Math.floor(Math.random() * PARTS.filter((p) => p.fault).length),
       x: W * (0.25 + Math.random() * 0.5), y: H * (0.54 + Math.random() * 0.26),
     });
+  }
+
+  // A ring that grows out of a door when something comes through it.
+  pulse(x, y, color) {
+    for (const delay of [0, 120]) {
+      const c = this.scene.add.circle(x, y, DOOR, 0, 0).setStrokeStyle(4, color, 1).setDepth(3);
+      this.scene.tweens.add({ targets: c, scale: 1.7, alpha: 0, delay, duration: 420, onComplete: () => c.destroy() });
+    }
   }
 
   flash(x, y, color) {
@@ -165,7 +175,15 @@ export class Deck {
       it.vx *= SETTINGS.arrivalSpeed / speed; it.vy *= SETTINGS.arrivalSpeed / speed;
     }
     this.add(it);
-    this.flash(clamp(it.x, 0, W), clamp(it.y, 0, H), from ? hex(from.color) : 0xffffff);
+    // A fading trail back the way it came, and a pulse on the door it came through.
+    const sp = Math.hypot(it.vx, it.vy) || 1, ux = it.vx / sp, uy = it.vy / sp;
+    for (let i = 1; i <= 3; i++) {
+      const ghost = this.scene.add.circle(it.x - ux * i * 26, it.y - uy * i * 26, R * (1 - i * 0.13), COLORS.cream, 0.5 - i * 0.12).setDepth(4);
+      this.scene.tweens.add({ targets: ghost, alpha: 0, x: ghost.x + ux * 60, y: ghost.y + uy * 60, duration: 320, onComplete: () => ghost.destroy() });
+    }
+    const door = this.doors.get(m.from);
+    if (door) this.pulse(door.cx, door.cy, from ? hex(from.color) : COLORS.cream);
+    else this.flash(clamp(it.x, 0, W), clamp(it.y, 0, H), from ? hex(from.color) : COLORS.cream);
     sfx.receive(); buzz('MEDIUM');
   }
 
@@ -173,7 +191,7 @@ export class Deck {
     const { W, H } = view;
     const it = this.add({ id: m.item.id, kind: m.item.kind,
       x: W * (0.2 + Math.random() * 0.6), y: H * (0.45 + Math.random() * 0.25) });
-    this.flash(it.x, it.y, 0xffffff);
+    this.flash(it.x, it.y, COLORS.cream);
   }
 
   onBounce(m) {
@@ -185,17 +203,19 @@ export class Deck {
     const door = this.doors.get(m.from), p = state.players.find((x) => x.id === m.from), part = PARTS[m.kind];
     if (!door || !p || !part) return;
     const scene = this.scene;
-    const label = text(scene, 0, 0, `${part.e} ${part.name}!`, { size: 16, weight: '800', color: '#14161c' });
-    const w = label.width + 22, h = 34;
-    // Sits just inside the door, pushed in from the edge and kept on screen.
-    const x = clamp(door.x - door.nx * (DOOR + 12 + w / 2), w / 2 + 6, view.W - w / 2 - 6);
-    const y = clamp(door.y - door.ny * (DOOR + 12 + h / 2), h / 2 + 6, view.H - h / 2 - 6);
+    // A speech bubble in the asker's colour, growing out of their door.
+    const label = text(scene, 14, 0, `${part.name}!`, { size: 18, weight: '900', color: COLORS.inkCss });
+    const w = label.width + 58, h = 46;
+    label.setX(-w / 2 + 44 + label.width / 2);
+    const pic = icon(scene, -w / 2 + 25, 0, part.icon, 26);
+    const x = clamp(door.x - door.nx * (DOOR * 0.6 + 10 + w / 2), w / 2 + 8, view.W - w / 2 - 8);
+    const y = clamp(door.y - door.ny * (DOOR * 0.6 + 10 + h / 2) - (door.ny ? 0 : DOOR * 0.7), h / 2 + 8, view.H - h / 2 - 8);
     const bg = scene.add.graphics();
-    bg.fillStyle(hex(p.color), 1).fillRoundedRect(-w / 2, -h / 2, w, h, 10);
-    const bubble = scene.add.container(x, y, [bg, label]).setDepth(7).setScale(0.6);
+    bg.fillStyle(hex(p.color), 1).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+    const bubble = scene.add.container(x, y, [bg, pic, label]).setDepth(7).setScale(0.6);
     scene.tweens.add({ targets: bubble, scale: 1, duration: 160, ease: 'Back.Out' });
     scene.tweens.add({ targets: bubble, alpha: 0, delay: 3500, duration: 500, onComplete: () => bubble.destroy() });
-    this.flash(door.x - door.nx * DOOR, door.y - door.ny * DOOR, hex(p.color));
+    this.pulse(door.cx, door.cy, hex(p.color));
     sfx.fault(); buzz('LIGHT');
   }
 
@@ -255,7 +275,7 @@ export class Deck {
     }
     for (const it of this.items) {
       it.view.setPosition(it.x, it.y).setScale(it.held ? 1.08 : 1);
-      if (!it.badge) it.disc.setFillStyle(it.held ? COLORS.buttonDown : it.base);
+      it.shadow.setPosition(it.held ? 9 : 5, it.held ? 9 : 5); // a held part lifts off the deck
     }
   }
 
@@ -309,13 +329,17 @@ export class Deck {
   refresh() {
     const { W, H } = view, self = mySelf(), o = others();
 
-    // The whole deck is tinted with my room's colour, so crewmates can match the portal on
-    // their screen to this phone.
-    this.tint.setSize(W, H).setFillStyle(self ? hex(self.color) : 0xffffff, self ? 0.16 : 0);
+    // Backdrop. The planet along the bottom is my room's colour, so crewmates can match the
+    // door on their screen to this phone. Nothing else sits behind the play area but a faint orbit.
+    const back = this.backG, rise = H - view.safeBottom - PLANET, pr = Math.max(W, 420) * 1.6;
+    back.clear();
+    back.lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.52, W * 0.73);
+    back.fillStyle(self ? hex(self.color) : COLORS.planet, 1).fillCircle(W / 2, rise + pr, pr);
 
-    // Portals: a coloured band along each crewmate's stretch of edge, and a round door with
-    // their room's icon and name at the spot that points at them.
-    const g = this.portalG, T = 12, gap = 5, inset = Deck.topInset();
+    // Doors: each crewmate has a half-round door in their colour poking in from the edge at the
+    // spot that points at them, with their room's picture in it, and a thin band of their colour
+    // along the whole stretch of edge that leads to them.
+    const g = this.portalG, T = 6, gap = 5, inset = Deck.topInset();
     g.clear();
     for (const b of this.portalBits) b.destroy();
     this.portalBits = [];
@@ -332,36 +356,30 @@ export class Deck {
         else g.fillRect(Math.min(pa.x, pb.x), 0, Math.abs(pb.x - pa.x), T);
       }
 
-      // The door: kept clear of the corners, and below the notch on the top edge.
+      // The door itself: kept clear of the corners and the planet, and below the notch on the top edge.
       const m = stripPoint(door), top = edgeOf(door) === 'T';
-      const depth = T + DOOR + 2 + (top ? inset : 0);
-      const dx = top ? clamp(m.x, DOOR + T + 4, W - DOOR - T - 4) : m.x - m.nx * depth;
-      const dy = top ? depth : clamp(m.y, DOOR + T + 4 + inset, H - DOOR - 90);
-      g.fillStyle(0x14161c, 1).fillCircle(dx, dy, DOOR);
-      g.lineStyle(3, color, alpha).strokeCircle(dx, dy, DOOR);
-      this.portalBits.push(emoji(this.scene, dx, dy + 1, p.icon || '', DOOR * 1.05).setDepth(2).setAlpha(p.away ? 0.4 : 1));
-      const name = text(this.scene, 0, 0, p.away ? `${p.name} is away` : p.name, { size: 13, weight: '700', color: p.color })
-        .setDepth(2).setAlpha(p.away ? 0.45 : 1);
-      // The name runs along the edge beside the door: below it on the sides, to the right of it on top.
-      if (top) name.setOrigin(0, 0.5).setPosition(dx + DOOR + 6, dy);
-      else name.setRotation(m.nx < 0 ? -Math.PI / 2 : Math.PI / 2).setPosition(dx, dy + DOOR + 8 + name.width / 2);
-      this.portalBits.push(name);
-      // A station in their room this leg: a small marker on the far side of the door from the name.
+      const cx = top ? clamp(m.x, DOOR + 8, W - DOOR - 8) : m.x;
+      const cy = top ? inset : clamp(m.y, DOOR + inset + 12, rise - DOOR - 34);
+      if (top && inset > 0) g.fillRect(cx - DOOR, 0, DOOR * 2, inset);
+      g.fillCircle(cx, cy, DOOR);
+      const ix = top ? cx : cx - m.nx * DOOR * 0.48, iy = top ? cy + DOOR * 0.48 : cy; // where the picture sits
+      this.portalBits.push(icon(this.scene, ix, iy, roomIcon(p.name), 28).setDepth(2).setAlpha(p.away ? 0.5 : 1));
       const station = (state.game.stations || []).find((s) => s.owner === p.id);
-      if (station && STATIONS[station.type]) {
-        const sx = top ? dx - DOOR - 13 : dx, sy = top ? dy : dy - DOOR - 13;
-        g.fillStyle(COLORS.warn, alpha).fillCircle(sx, sy, 11);
-        this.portalBits.push(emoji(this.scene, sx, sy + 1, STATIONS[station.type].icon, 13).setDepth(2));
-      }
-      this.doors.set(p.id, { x: dx, y: dy, nx: m.nx, ny: m.ny });
+      const words = (p.away ? `${p.name} is away` : p.name) + (station && STATIONS[station.type] ? `\n${STATIONS[station.type].name} here` : '');
+      const name = text(this.scene, 0, 0, words, { size: 14, weight: '700', color: p.color, align: top ? 'left' : m.nx < 0 ? 'left' : 'right' })
+        .setDepth(2).setAlpha(p.away ? 0.6 : 1);
+      // The name sits beside the door: to its right on the top edge, under it on the sides.
+      if (top) name.setOrigin(0, 0).setPosition(cx + DOOR + 8, inset + 10);
+      else name.setOrigin(m.nx < 0 ? 0 : 1, 0).setPosition(m.nx < 0 ? 10 : W - 10, cy + DOOR + 6);
+      this.portalBits.push(name);
+      this.doors.set(p.id, { x: ix, y: iy, cx, cy, nx: m.nx, ny: m.ny });
     }
 
     this.waiting.setPosition(W / 2, H * 0.66)
       .setText(o.length || !self ? '' : 'Waiting for crew to join…\nTap Invite to bring someone aboard.');
 
-    const sy = H - view.safeBottom - 28;
-    this.dot.setPosition(19, sy).setFillStyle(self ? hex(self.color) : 0x555555);
-    this.status.setPosition(34, sy);
+    const sy = rise + 22; // along the top of the planet, above the buttons
+    this.status.setPosition(W / 2, sy);
     this.refreshStatus();
 
     for (const it of this.items) if (it.state === 'in') { it.x = clamp(it.x, R, W - R); it.y = clamp(it.y, R, H - R); }
@@ -371,7 +389,7 @@ export class Deck {
 
   refreshStatus() {
     const self = mySelf();
-    const ping = state.pingMs != null ? `\n${state.pingMs}ms (worst ${Math.max(...state.pings)})` : '';
+    const ping = state.pingMs != null ? ` · ${state.pingMs}ms (worst ${Math.max(...state.pings)})` : '';
     const here = state.players.filter((p) => !p.away).length;
     this.status.setText(!state.online ? 'Reconnecting…' : self ? `${self.name} · ${here} aboard${ping}` : 'Connecting…');
   }
@@ -380,7 +398,7 @@ export class Deck {
   banner(self) {
     const { W, H } = view;
     const a = text(this.scene, W / 2, H * 0.42, 'Your room is', { size: 20, weight: '500' }).setDepth(4);
-    const b = text(this.scene, W / 2, H * 0.42 + 52, `${self.icon || ''} ${self.name}`, { size: 56, weight: '800', color: self.color }).setDepth(4);
+    const b = text(this.scene, W / 2, H * 0.42 + 52, self.name.toUpperCase(), { size: 56, weight: '900', color: self.color, spacing: 2 }).setDepth(4);
     this.scene.tweens.add({ targets: [a, b], alpha: 0, delay: 3000, duration: 1000,
       onComplete: () => { a.destroy(); b.destroy(); } });
   }

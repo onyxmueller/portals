@@ -12,9 +12,10 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     setupCamera(this);
-    this.title = text(this, 0, 0, 'PORTALS', { size: 56, weight: '800' });
+    this.back = this.add.graphics();
+    this.title = text(this, 0, 0, 'PORTALS', { size: 60, weight: '900', spacing: 2 });
     this.tagline = text(this, 0, 0, 'A spaceship held together by teamwork', { size: 15, color: COLORS.dim });
-    this.prompt = text(this, 0, 0, 'Tap to board', { size: 20, weight: '600', color: '#ffd43b' });
+    this.prompt = text(this, 0, 0, 'Tap to board', { size: 20, weight: '700', color: COLORS.onPlanet });
     this.tweens.add({ targets: this.prompt, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
     followResize(this);
 
@@ -26,9 +27,15 @@ export class TitleScene extends Phaser.Scene {
   }
 
   layout() {
-    const { W, H } = view;
+    const { W, H } = view, r = W * 1.05;
+    // A planet rising, an orbit, a few stars: the poster the rest of the game is cut from.
+    this.back.clear().lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, W * 0.73);
+    this.back.fillStyle(COLORS.planet, 1).fillCircle(W / 2, H * 0.74 + r, r);
+    this.back.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 30, H * 0.74 + 110 + r * 0.8, r * 0.8);
+    this.back.fillStyle(COLORS.cream, 1);
+    for (const [x, y] of [[0.12, 0.13], [0.86, 0.1], [0.78, 0.5], [0.16, 0.56], [0.5, 0.07]]) this.back.fillCircle(W * x, H * y, 2);
     this.title.setPosition(W / 2, H * 0.36);
     this.tagline.setPosition(W / 2, H * 0.36 + 48);
-    this.prompt.setPosition(W / 2, H * 0.62);
+    this.prompt.setPosition(W / 2, H * 0.84);
   }
 }

@@ -4,7 +4,7 @@
 // `gives` here the same as there. Numbers are positions in parts.js.
 export const STATIONS = {
   charger: {
-    icon: '⚡', name: 'Charger', takes: 8, gives: 1,
+    icon: 'bolt', name: 'Charger', takes: 8, gives: 1,
     turns: 4, // how many times round your finger has to go
     empty: 'Leave a flat battery here',
     busy: 'Spin your finger round it!',

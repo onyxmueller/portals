@@ -8,16 +8,18 @@ import { PARTS } from '../config/parts.js';
 import { STATIONS } from '../config/stations.js';
 import { net, state, send } from '../net.js';
 import { Deck } from '../deck/Deck.js';
-import { text, emoji, button, rowFromRight } from '../ui/widgets.js';
+import { text, icon, button, rowFromRight } from '../ui/widgets.js';
 import { openSettings } from '../ui/settings.js';
 import { sfx } from '../audio/sfx.js';
 import { buzz } from '../native.js';
 import { followPhase, followResize } from './route.js';
 
 const R = SETTINGS.partRadius, SR = SETTINGS.socketRadius, AR = SETTINGS.airlockRadius;
-const SLOTS = 2; // a room shows at most this many faults at once (the server sends no more)
-const STATION_R = 52;     // size of a station's pad
+const SLOTS = 2;           // a room shows at most this many faults at once (the server sends no more)
+const RING = 14;           // how thick a fault's timer ring is
+const STATION_R = 52;      // size of a station's pad
 const STATION_REACH = 150; // how far from a station a finger can be and still be working it
+const URGENT = 5000;       // a fault with less than this long left (ms) turns coral: the hull is about to pay
 const TAU = Math.PI * 2;
 
 export class GameScene extends Phaser.Scene {
@@ -31,33 +33,38 @@ export class GameScene extends Phaser.Scene {
     this.faults = []; // faults in my room: { id, kind, ttl, deadline, slot, done }
 
     this.airlockG = this.add.graphics().setDepth(1);
-    this.airlockLabel = text(this, 0, 0, 'airlock', { size: 12, color: COLORS.faint }).setDepth(1);
+    this.airlockLabel = text(this, 0, 0, 'airlock', { size: 13, color: COLORS.dim }).setDepth(1);
 
-    // Each fault slot: a ring that drains (drawn every frame), the part it needs ghosted
-    // inside, and two lines of words above.
+    // Each fault slot: a thick ring that drains (drawn every frame), the part it needs ghosted
+    // inside, the fault's name in bold capitals (the only ones on this screen) and what it needs.
     this.ringG = this.add.graphics().setDepth(1);
     this.slots = [];
     for (let i = 0; i < SLOTS; i++) {
       this.slots.push({
-        ghost: emoji(this, 0, 0, '', R * 1.15).setAlpha(0.4).setDepth(1),
-        title: text(this, 0, 0, '', { size: 15, weight: '800' }).setDepth(1),
+        ghost: icon(this, 0, 0, 'star', R * 1.2, COLORS.cream).setAlpha(0.4).setDepth(1),
+        title: text(this, 0, 0, '', { size: 26, weight: '900', spacing: 1 }).setDepth(1),
         needs: text(this, 0, 0, '', { size: 13 }).setDepth(1),
+        kind: -1,
       });
     }
 
     // A station in my room, if this leg has one and it's mine.
     this.work = null; // the part sitting on my station: { it, done (radians turned so far), finger: { id, a } | null }
-    this.stationIcon = emoji(this, 0, 0, '', STATION_R * 0.9).setAlpha(0.3).setDepth(1);
-    this.stationName = text(this, 0, 0, '', { size: 15, weight: '800', color: '#ffd43b' }).setDepth(1);
+    this.stationIcon = icon(this, 0, 0, 'bolt', STATION_R * 0.8, COLORS.cream).setAlpha(0.3).setDepth(1);
+    this.stationName = text(this, 0, 0, '', { size: 18, weight: '700', color: COLORS.warnCss }).setDepth(1);
     this.stationHint = text(this, 0, 0, '', { size: 13 }).setDepth(1);
-    this.stationNote = text(this, 0, 0, '', { size: 13, color: '#ffd43b' }).setDepth(10); // "the Charger is in Reactor"
     this.input.on('pointermove', this.onWorkMove, this);
     this.input.on('pointerup', this.onWorkUp, this);
     this.input.on('pointerupoutside', this.onWorkUp, this);
 
+    // The hull: words above a flat bar. `hit` remembers the piece just lost so it can be shown going.
     this.hullG = this.add.graphics().setDepth(10);
-    this.hullText = text(this, 0, 0, '', { size: 13, weight: '600' }).setDepth(10);
-    this.damage = this.add.rectangle(0, 0, 10, 10, COLORS.bad, 0).setOrigin(0).setDepth(15);
+    this.hullText = text(this, 0, 0, '', { size: 14, weight: '700' }).setOrigin(0, 0.5).setDepth(10);
+    this.fixedText = text(this, 0, 0, '', { size: 14 }).setOrigin(1, 0.5).setDepth(10);
+    this.lossText = text(this, 0, 0, '', { size: 14, weight: '900', color: COLORS.badCss }).setDepth(10);
+    this.hit = null; // { from (hull before), until (ms) }
+    this.seenHull = state.game.hull;
+    this.frameG = this.add.graphics().setDepth(15).setAlpha(0); // the coral frame that means "hull lost"
     this.buttons = [button(this, 'Settings', () => openSettings(this))];
 
     net.on('game', this.onGame, this);
@@ -69,11 +76,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   // The hull bar sits below any doors on the top edge.
-  hullY() { return Deck.topInset() + 78; }
+  hullY() { return Deck.topInset() + 84; }
 
-  slotPos(slot) { return { x: view.W * (slot === 0 ? 0.3 : 0.7), y: view.safeTop + view.H * 0.27 }; }
-  airlockPos() { return { x: view.W / 2, y: view.H - 135 }; }
-  stationPos() { return { x: view.W / 2, y: view.safeTop + view.H * 0.5 }; }
+  slotPos(slot) { return { x: view.W * (slot === 0 ? 0.3 : 0.7), y: view.safeTop + view.H * 0.3 }; }
+  airlockPos() { return { x: view.W / 2, y: view.H - view.safeBottom - 172 }; }
+  stationPos() { return { x: view.W / 2, y: view.safeTop + view.H * 0.53 }; }
 
   // The station in my room this leg, or null.
   myStation() {
@@ -82,32 +89,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   layout() {
-    const { W, H, safeTop, safeBottom } = view;
+    const { W, H, safeBottom } = view;
+    // The airlock is a hole, not a thing: dark, with a dashed rim.
     const air = this.airlockPos(), g = this.airlockG;
     g.clear();
-    g.fillStyle(0x0b0c10, 1).fillCircle(air.x, air.y, AR);
-    g.lineStyle(3, 0x495057, 1).strokeCircle(air.x, air.y, AR);
-    this.airlockLabel.setPosition(air.x, air.y + AR + 12);
-    this.hullText.setPosition(W / 2, this.hullY() + 18);
-    this.stationNote.setPosition(W / 2, this.hullY() + 38);
+    g.fillStyle(COLORS.shadow, 1).fillCircle(air.x, air.y, AR + 3);
+    g.lineStyle(3, COLORS.line, 1);
+    for (let i = 0; i < 12; i++) { g.beginPath(); g.arc(air.x, air.y, AR + 3, (i / 12) * TAU, ((i + 0.55) / 12) * TAU); g.strokePath(); }
+    this.airlockLabel.setPosition(air.x, air.y + AR + 18);
+
+    const bw = Math.min(W - 140, 250), bx = (W - bw) / 2, y = this.hullY();
+    this.hullText.setPosition(bx, y - 15);
+    this.fixedText.setPosition(bx + bw, y - 15);
+    this.frameG.clear().lineStyle(24, COLORS.bad, 1).strokeRect(0, 0, W, H); // half of the line is off-screen
+    rowFromRight(this.buttons, W - 10, H - safeBottom - 30);
     this.layoutStation();
-    this.damage.setSize(W, H);
-    rowFromRight(this.buttons, W - 10, H - safeBottom - 28);
     this.deck.refresh();
     this.drawHull();
   }
 
   // ---------- the ship's state ----------
   onGame(m) {
-    this.syncFaults(m);
+    const gone = this.syncFaults(m);
     if (m.ev === 'lost') {
-      // The whole ship shudders when a fault runs out anywhere.
-      this.damage.setAlpha(0.4);
-      this.tweens.add({ targets: this.damage, alpha: 0, duration: 500 });
+      // A fault ran out somewhere: every phone gets the coral frame, and the hull bar shows
+      // the piece going. Coral is only ever about the hull.
+      this.hit = { from: this.seenHull, until: performance.now() + 1400 };
+      this.frameG.setAlpha(1);
+      this.tweens.add({ targets: this.frameG, alpha: 0, delay: 250, duration: 700 });
+      this.cameras.main.shake(220, 0.006);
       sfx.damage(); buzz('MEDIUM');
+      for (const f of gone) this.tooLate(f); // it was one of mine
     }
+    this.seenHull = m.hull;
     if (m.ev === 'fault' && m.who === state.me) { sfx.fault(); buzz('LIGHT'); }
-    if (m.ev === 'burst') this.shout('☄️ Asteroids!');
+    if (m.ev === 'burst') this.asteroids();
     // A station moves if its crewmate drops out: redraw the doors and my own pad.
     const where = JSON.stringify(m.stations || []);
     if (where !== this.stationsSeen) { this.deck.refresh(); this.layoutStation(); }
@@ -115,6 +131,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // Keep my list of faults in step with the server's, holding on to each one's slot.
+  // Returns the ones that have just gone without my fixing them.
   syncFaults(m) {
     const now = performance.now(), old = this.faults;
     this.faults = m.faults.filter((f) => f.owner === state.me).map((f) => {
@@ -122,10 +139,11 @@ export class GameScene extends Phaser.Scene {
       return { id: f.id, kind: f.kind, ttl: f.ttl, deadline: now + f.left, slot: o ? o.slot : -1, done: o ? o.done : false };
     });
     for (const f of this.faults) if (f.slot < 0) f.slot = this.faults.some((x) => x.slot === 0) ? 1 : 0;
+    return old.filter((o) => !o.done && !this.faults.some((f) => f.id === o.id));
   }
 
   // Tapping one of my faults calls out for the part: crewmates see what I need in a bubble
-  // on the portal that points at me. (Shouting still works, and is more fun.)
+  // on the door that points at me. (Shouting still works, and is more fun.)
   callOut(x, y) {
     for (const f of this.faults) {
       const p = this.slotPos(f.slot);
@@ -137,14 +155,76 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // Big words across the middle for a moment, when something hits the whole ship.
-  shout(words) {
-    const t = text(this, view.W / 2, view.H * 0.44, words, { size: 34, weight: '800', color: '#ffa94d' }).setDepth(12).setScale(0.6);
-    this.tweens.add({ targets: t, scale: 1, duration: 180, ease: 'Back.Out' });
-    this.tweens.add({ targets: t, alpha: 0, delay: 1400, duration: 500, onComplete: () => t.destroy() });
-    this.damage.setAlpha(0.25);
-    this.tweens.add({ targets: this.damage, alpha: 0, duration: 400 });
-    sfx.damage(); buzz('MEDIUM');
+  // Shrink a fault's name until it fits over its own slot, clear of the one beside it.
+  fit(title) {
+    const room = view.W * 0.4 - 18;
+    title.setFontSize(26);
+    if (title.width > room) title.setFontSize(Math.max(15, Math.floor(26 * room / title.width)));
+    return title;
+  }
+
+  // ---------- moments ----------
+  // Something that pops up over a fault's slot for a moment: a drawing, a word and maybe a line under it.
+  moment(p, draw, word, color, line) {
+    const g = this.add.graphics().setDepth(6);
+    draw(g);
+    const bits = [g, this.fit(text(this, p.x, p.y - 93, word, { size: 26, weight: '900', color, spacing: 1 }).setDepth(6))];
+    if (line) bits.push(text(this, p.x, p.y - 69, line, { size: 13 }).setDepth(6));
+    this.tweens.add({ targets: bits, alpha: 0, delay: 900, duration: 350, onComplete: () => bits.forEach((b) => b.destroy()) });
+  }
+
+  // Fixed: the ring snaps full and green, with a tick and a burst.
+  fixed(p) {
+    this.moment(p, (g) => {
+      g.lineStyle(5, COLORS.good, 1);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        g.lineBetween(p.x + Math.cos(a) * 58, p.y + Math.sin(a) * 58, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
+      }
+      g.fillStyle(COLORS.panel, 1).fillCircle(p.x, p.y, SR);
+      g.lineStyle(RING, COLORS.good, 1).strokeCircle(p.x, p.y, SR - 2);
+      g.lineStyle(9, COLORS.good, 1).beginPath();
+      g.moveTo(p.x - 19, p.y + 1); g.lineTo(p.x - 6, p.y + 14); g.lineTo(p.x + 20, p.y - 14);
+      g.strokePath();
+    }, 'FIXED!', COLORS.goodCss);
+  }
+
+  // Too late: a broken coral ring and a cross, and what it cost.
+  tooLate(f) {
+    const p = this.slotPos(f.slot);
+    this.moment(p, (g) => {
+      g.fillStyle(COLORS.panel, 1).fillCircle(p.x, p.y, SR);
+      g.lineStyle(RING, COLORS.bad, 1);
+      for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(p.x, p.y, SR - 2, (i / 4) * TAU + 0.15, ((i + 1) / 4) * TAU - 0.15); g.strokePath(); }
+      g.lineStyle(9, COLORS.bad, 1).lineBetween(p.x - 15, p.y - 15, p.x + 15, p.y + 15).lineBetween(p.x + 15, p.y - 15, p.x - 15, p.y + 15);
+    }, 'TOO LATE', COLORS.badCss, 'the hull paid for it');
+  }
+
+  // An asteroid strike opens a breach in every room. It makes work but costs no hull, so
+  // nothing here is coral: rocks cross the screen and a cream banner says what to do.
+  asteroids() {
+    const { W, H } = view, cy = H * 0.52;
+    for (let i = 0; i < 4; i++) {
+      const size = 16 + Math.random() * 22, y0 = cy - 170 + i * 80 + Math.random() * 30;
+      const rock = this.add.graphics().setDepth(11);
+      rock.lineStyle(size * 0.45, COLORS.cream, 0.3).lineBetween(-size * 4, -size * 2, 0, 0); // its trail
+      rock.fillStyle(COLORS.planet, 1);
+      rock.fillPoints([[-0.7, -0.9], [0.3, -1], [1, -0.4], [0.9, 0.5], [0.2, 1], [-0.8, 0.7], [-1, -0.2]].map(([x, y]) => new Phaser.Geom.Point(x * size, y * size)), true);
+      rock.setPosition(-60 - i * 50, y0 - 60);
+      this.tweens.add({ targets: rock, x: W + 120, y: y0 + (W + 180) * 0.5, delay: i * 90, duration: 650, onComplete: () => rock.destroy() });
+    }
+    const bw = Math.min(W - 70, 310);
+    const g = this.add.graphics();
+    g.fillStyle(COLORS.shadow, 1).fillRect(-bw / 2 + 6, -36, bw, 84);
+    g.fillStyle(COLORS.cream, 1).fillRect(-bw / 2, -42, bw, 84);
+    const banner = this.add.container(W / 2, cy, [
+      g,
+      text(this, 0, -12, 'ASTEROIDS!', { size: 34, weight: '900', color: COLORS.inkCss, spacing: 1 }),
+      text(this, 0, 20, 'Patch every room', { size: 15, weight: '700', color: COLORS.inkCss }),
+    ]).setDepth(12).setRotation(-0.05).setScale(0.5);
+    this.tweens.add({ targets: banner, scale: 1, duration: 200, ease: 'Back.Out' });
+    this.tweens.add({ targets: banner, alpha: 0, delay: 1900, duration: 400, onComplete: () => banner.destroy() });
+    sfx.strike(); buzz('MEDIUM');
   }
 
   // ---------- my station ----------
@@ -153,16 +233,12 @@ export class GameScene extends Phaser.Scene {
     const mine = this.myStation(), p = this.stationPos();
     for (const o of [this.stationIcon, this.stationName, this.stationHint]) o.setVisible(!!mine);
     if (mine) {
-      this.stationIcon.setText(mine.icon).setPosition(p.x, p.y + 2);
-      this.stationName.setText(mine.name).setPosition(p.x, p.y - STATION_R - 30);
-      this.stationHint.setPosition(p.x, p.y - STATION_R - 12);
+      this.stationIcon.setTexture(`icon-${mine.icon}`).setPosition(p.x, p.y);
+      this.stationName.setText(mine.name).setPosition(p.x, p.y - STATION_R - 44);
+      this.stationHint.setPosition(p.x, p.y - STATION_R - 22);
     } else if (this.work) {
       this.work.it.docked = false; this.work = null; // it moved to another room: let the part go
     }
-    // Everyone else is told which room to throw at.
-    const other = (state.game.stations || []).find((s) => s.owner !== state.me && STATIONS[s.type]);
-    const room = other && state.players.find((x) => x.id === other.owner);
-    this.stationNote.setText(room ? `${STATIONS[other.type].icon} The ${STATIONS[other.type].name} is in ${room.name}` : '');
   }
 
   // A finger went down on empty deck. If there's a part on my station and the finger is near
@@ -222,7 +298,7 @@ export class GameScene extends Phaser.Scene {
         if (Math.hypot(it.x - p.x, it.y - p.y) > SR) continue;
         f.done = true; used = true;
         send({ t: 'fix', id: f.id });
-        this.deck.flash(p.x, p.y, COLORS.good);
+        this.fixed(p);
         sfx.fix(); buzz('MEDIUM');
         break;
       }
@@ -235,47 +311,62 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- drawing ----------
   drawHull() {
-    const { W } = view, g = this.hullG, game = state.game;
-    const y = this.hullY(), bw = Math.min(W - 120, 260), bx = (W - bw) / 2, k = game.hull / 100;
+    const { W } = view, g = this.hullG, game = state.game, now = performance.now();
+    const y = this.hullY(), bw = Math.min(W - 140, 250), bx = (W - bw) / 2, k = game.hull / 100;
+    const hit = this.hit && now < this.hit.until ? this.hit : (this.hit = null);
     g.clear();
-    g.fillStyle(0x343a40, 1).fillRect(bx, y - 5, bw, 10);
-    g.fillStyle(k > 0.5 ? COLORS.good : k > 0.25 ? COLORS.warn : COLORS.bad, 1).fillRect(bx, y - 5, bw * k, 10);
-    this.hullText.setText(`Hull ${game.hull}%  ·  Fixed ${game.score} of ${game.goal}`);
+    g.fillStyle(COLORS.panel, 1).fillRect(bx, y, bw, 12);
+    g.fillStyle(COLORS.cream, 1).fillRect(bx, y, bw * k, 12);
+    if (hit) g.fillStyle(COLORS.bad, 1).fillRect(bx + bw * k, y, bw * Math.max(0, hit.from - game.hull) / 100, 12);
+    // Coral words while a piece is going, or when there's little left to lose.
+    this.hullText.setText(`Hull ${game.hull}%`).setColor(hit || k <= 0.3 ? COLORS.badCss : COLORS.text);
+    this.fixedText.setText(`Fixed ${game.score} of ${game.goal}`);
+    this.lossText.setVisible(!!hit);
+    if (hit) this.lossText.setText(`−${hit.from - game.hull}%`).setPosition(bx + bw * (k + (hit.from - game.hull) / 200), y + 26);
   }
 
   update() {
     const now = performance.now(), g = this.ringG;
+    if (this.hit) this.drawHull(); // so the lost piece clears when its moment is over
     g.clear();
     for (const s of this.slots) { s.ghost.setVisible(false); s.title.setVisible(false); s.needs.setVisible(false); }
 
-    // My station: a pad, and a ring that fills as the part on it is worked.
+    // My station: a pad, and a thick ring that fills as the part on it is worked.
     const mine = this.myStation();
     if (mine) {
       const p = this.stationPos(), w = this.work;
-      g.fillStyle(0x0b0c10, 0.65).fillCircle(p.x, p.y, STATION_R);
-      g.lineStyle(5, w ? 0x343a40 : COLORS.warn, w ? 1 : 0.7).strokeCircle(p.x, p.y, STATION_R);
+      g.fillStyle(COLORS.panel, 1).fillCircle(p.x, p.y, STATION_R + 8);
       if (w) {
-        g.lineStyle(7, COLORS.good, 1).beginPath();
+        g.lineStyle(16, COLORS.good, 1).beginPath();
         g.arc(p.x, p.y, STATION_R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, w.done / (mine.turns * TAU)));
         g.strokePath();
+      } else {
+        g.lineStyle(3, COLORS.warn, 0.8).strokeCircle(p.x, p.y, STATION_R);
       }
       this.stationIcon.setVisible(!w);
       this.stationHint.setText(w ? mine.busy : mine.empty);
     }
+
     for (const f of this.faults) {
       if (f.done) continue;
       const p = this.slotPos(f.slot), part = PARTS[f.kind], s = this.slots[f.slot];
-      const left = Math.max(0, f.deadline - now), urgent = left < 5000;
-      const col = urgent ? COLORS.bad : COLORS.warn, css = urgent ? '#ff6b6b' : '#ffd43b';
-      const width = urgent ? 6 + 2 * Math.sin(now / 90) : 6;
-      g.fillStyle(0x0b0c10, 0.65).fillCircle(p.x, p.y, SR);
-      g.lineStyle(width, 0x343a40, 1).strokeCircle(p.x, p.y, SR);
-      g.lineStyle(width, col, 1).beginPath();
-      g.arc(p.x, p.y, SR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (left / f.ttl));
+      const left = Math.max(0, f.deadline - now), urgent = left < URGENT;
+      const width = urgent ? RING + 2 * Math.sin(now / 90) : RING;
+      g.fillStyle(COLORS.panel, 1).fillCircle(p.x, p.y, SR + RING / 2 - 2);
+      g.lineStyle(width, urgent ? COLORS.bad : COLORS.warn, 1).beginPath();
+      g.arc(p.x, p.y, SR - 2, -Math.PI / 2, -Math.PI / 2 + TAU * (left / f.ttl));
       g.strokePath();
-      s.ghost.setText(part.e).setPosition(p.x, p.y + 2).setVisible(true);
-      s.title.setText(part.fault).setColor(css).setPosition(p.x, p.y - SR - 30).setVisible(true);
-      s.needs.setText(`needs ${part.name}`).setPosition(p.x, p.y - SR - 12).setVisible(true);
+      if (s.kind !== f.kind) {
+        // New fault in this slot: its picture, and its name as big as fits.
+        s.kind = f.kind;
+        s.ghost.setTexture(`icon-${part.icon}`);
+        s.title.setText(part.fault.toUpperCase()).setFontSize(26);
+        this.fit(s.title);
+        s.needs.setText(`needs ${part.name}`);
+      }
+      s.ghost.setPosition(p.x, p.y).setVisible(true);
+      s.title.setColor(urgent ? COLORS.badCss : COLORS.warnCss).setPosition(p.x, p.y - 93).setVisible(true);
+      s.needs.setPosition(p.x, p.y - 69).setVisible(true);
     }
   }
 }

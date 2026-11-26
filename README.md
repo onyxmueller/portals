@@ -127,15 +127,16 @@ installs the server's packages.
 
 | File | What's in it |
 |---|---|
-| `src/config/settings.js` | Part size, fling speed, friction, colours, the live server's address |
+| `src/config/settings.js` | Part size, fling speed, friction, the colour palette, the live server's address |
 | `src/config/parts.js` | The parts and the fault each one fixes |
 | `src/config/stations.js` | How each station looks and what you do to work it |
 | `src/deck/Deck.js` | The play area: parts, portals along the edges, dragging, and the throw physics |
 | `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to, including where you pointed |
 | `src/scenes/` | The screens: title, home (start or join a crew), join (type a code), lobby (docked), story (briefing before a leg), game (flying), results (leg finished or ship lost) |
 | `src/ui/` | Buttons, sharp text, the Settings panel and the Invite panel (crew code and QR) |
+| `src/ui/icons.js` | Every picture in the game (parts and rooms), drawn as simple shapes |
 | `src/net.js` | The connection to the game server |
-| `src/audio/sfx.js` | Sound effects, made in code |
+| `src/audio/sfx.js` | Sound effects, made in code (still placeholder blips) |
 | `server/server.js` | The game server: serves the page, groups phones into crews, forwards throws, and runs each crew's ship (faults, hull, score) |
 | `server/levels.js` | The journey: each leg's story, goal, faults, pace, twist and station. Edit this to change or add legs |
 | `server/scripts/check-relay.mjs` | The check GitHub runs before every deploy |

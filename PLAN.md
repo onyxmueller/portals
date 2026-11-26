@@ -167,13 +167,34 @@ Start with 3 levels, then grow the campaign.
 Built: three legs with a briefing before each and stars after (Leaving port: fetch and drop;
 Asteroid belt: hull breaches in every room at once; The long dark: the Charger station, where
 flat batteries are cranked full with a spinning finger). Legs live in `server/levels.js`, and
-the goal grows with the crew. Still to do: play it with a real crew and tune the numbers, then
-more legs, more twists (stowaways, nebula, wormhole) and more stations (welder, pump...).
+the goal grows with the crew. Played on real phones: it works, though it may be too easy, so
+the numbers want tuning with a fuller crew. Still to do later: more legs, more twists (stowaways,
+nebula, wormhole) and more stations (welder, pump...).
 
-### Phase 5: Art, music and sound
+### Phase 5: Art, music and sound (look built; sound and music to do)
 
-- One finished-looking test screen first, to choose the style.
+Chosen direction: "space-age print" for the game (deep teal, cream, mustard, a planet behind the
+status strip, bold capitals for fault names only, flat shapes with hard shadows), with the
+"ship's manual" voice for briefings (grid, typewriter text, line drawings labelled as figures,
+dry quotes from the previous owner). Rules that came out of the mocks: only things you can pick
+up are cream chips with a hard shadow; timers are thick rings that drain; coral is only for the
+hull (about to be lost, or lost); an asteroid strike has its own look and says what to do.
+The mocks are on a design canvas: https://claude.ai/artifact/JDpet2au5uNEb1uU5MvSTo
+
+Built: the look is in the game on every screen, with our own drawn pictures in place of emoji
+and two bundled typefaces (Rubik, IBM Plex Mono). One change from the mocks: the planet along
+the bottom is the colour of your room, so crewmates can match a door on their screen to your
+phone. Still to do: sound effects and music, the Charger drawing on its briefing page, and a
+check of how it all looks on real phones.
+
+- Start as a designer, not a builder: mock up a few different visual approaches (two or three
+  distinct directions, each shown on the same screen) and choose between them before anything
+  is applied to the game.
 - Then everything: rooms, parts, faults, portals, hull damage, the ship.
+- Make cause and effect readable. Today the asteroid strike in leg 2 flashes red and plays the
+  hull-damage sound although no hull is lost, and "Asteroids!" doesn't say what to do. Red and
+  that sound should only ever mean hull lost; a strike needs its own look, sound and words
+  ("patch every room"), and the briefing should say a breach only costs hull if left unpatched.
 - Music for each level, and sound effects for throwing, catching, fixing and failing.
 
 **Done when:** nothing on screen or in the speakers is a placeholder.

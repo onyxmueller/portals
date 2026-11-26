@@ -13,10 +13,10 @@ export class HomeScene extends Phaser.Scene {
     setupCamera(this);
     if (state.crew) { this.scene.start(sceneFor(state.game.phase)); return; }
 
-    this.title = text(this, 0, 0, 'PORTALS', { size: 44, weight: '800' });
+    this.title = text(this, 0, 0, 'PORTALS', { size: 46, weight: '900', spacing: 2 });
     this.tagline = text(this, 0, 0, 'Every phone is a room on the ship.\nGet your crew together.', { size: 15, color: COLORS.dim });
-    this.start = button(this, 'Start a crew', () => { createCrew(); this.refresh(); }, { w: 240, h: 56 });
-    this.join = button(this, 'Join a crew', () => this.scene.start('Join'), { w: 240, h: 56 });
+    this.start = button(this, 'START A CREW', () => { createCrew(); this.refresh(); }, { w: 250, h: 56, kind: 'primary' });
+    this.join = button(this, 'Join a crew', () => this.scene.start('Join'), { w: 250, h: 52, kind: 'outline' });
     this.note = text(this, 0, 0, '', { size: 13, color: COLORS.faint });
 
     net.on('online', this.refresh, this);
