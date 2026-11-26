@@ -1,5 +1,5 @@
-// The deck is the play area of one phone: the parts sliding around on it, the coloured
-// portals along its edges, and the dragging and throwing. The lobby and the game both use it.
+// The deck is the play area of one phone: the parts sliding around on it, the portals along
+// its edges, and the dragging and throwing. The lobby and the game both use it.
 //
 // Parts are plain objects moved by our own physics (step, below); Phaser only draws them.
 // That's on purpose: a part leaving through an edge and arriving on another phone is the
@@ -8,12 +8,14 @@ import { view } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
 import { PARTS } from '../config/parts.js';
 import { net, state, send, connected, mySelf, others } from '../net.js';
-import { targetFor, segments, stripPos, stripPoint, portals } from '../throw/edges.js';
+import { portals, portalAt, portalFrom, stripPos, stripPoint, edgeOf } from '../throw/edges.js';
 import { text, emoji, hex } from '../ui/widgets.js';
 import { sfx, initAudio } from '../audio/sfx.js';
 import { buzz } from '../native.js';
 
 const R = SETTINGS.partRadius;
+const DOOR = 19;          // radius of the round "door" drawn on each portal
+const BADGE_SPEED = 150;  // how fast a badge must leave the screen to count as pointing (gentler than a throw)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let bannerShownFor = null; // the "Your room is..." banner shows once per room colour
 
@@ -21,12 +23,17 @@ export class Deck {
   constructor(scene) {
     this.scene = scene;
     this.items = [];        // { id, kind, x, y, vx, vy, state: 'in'|'entering'|'leaving', age, held, view, disc }
+                            // a "badge" item has .badge = a crewmate instead of .kind (see the lobby)
     this.drags = new Map(); // pointer id -> { it, ox, oy, samples: [{ x, y, t }] }
     this.onStep = null;     // the game scene hooks in here to check faults and the airlock
+    this.onBadge = null;    // called with (crewmate, x, y) when a badge is flung off an edge
+    this.onTap = null;      // called with (x, y) when a finger goes down on empty deck
+    this.hidePortals = false;
 
     this.tint = scene.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setDepth(0);
     this.portalG = scene.add.graphics().setDepth(2);
-    this.portalLabels = [];
+    this.portalBits = [];   // the icons and names drawn on the portals
+    this.doors = new Map(); // player id -> where their door is, for speech bubbles: { x, y, nx, ny }
     this.waiting = text(scene, 0, 0, '', { size: 15, color: COLORS.faint }).setDepth(2);
     this.dot = scene.add.circle(0, 0, 7, 0x555555).setDepth(10);
     this.status = text(scene, 0, 0, '', { size: 13, color: COLORS.dim, align: 'left' }).setOrigin(0, 0.5).setDepth(10);
@@ -42,6 +49,7 @@ export class Deck {
     net.on('throw', this.onThrow, this);
     net.on('spawn', this.onSpawn, this);
     net.on('bounce', this.onBounce, this);
+    net.on('ask', this.onAsk, this);
     scene.events.on('update', this.update, this);
     scene.events.once('shutdown', this.destroy, this);
 
@@ -55,14 +63,16 @@ export class Deck {
     net.off('throw', this.onThrow, this);
     net.off('spawn', this.onSpawn, this);
     net.off('bounce', this.onBounce, this);
+    net.off('ask', this.onAsk, this);
     this.scene.events.off('update', this.update, this);
   }
 
   // ---------- parts ----------
   add(it) {
     it.vx ??= 0; it.vy ??= 0; it.state ??= 'in'; it.age = 0; it.held = false;
-    it.disc = this.scene.add.circle(0, 0, R, COLORS.button);
-    const pic = emoji(this.scene, 0, 2, PARTS[it.kind].e, R * 1.15);
+    it.base = it.badge ? hex(it.badge.color) : COLORS.button;
+    it.disc = this.scene.add.circle(0, 0, R, it.base);
+    const pic = emoji(this.scene, 0, 2, it.badge ? it.badge.icon : PARTS[it.kind].e, R * 1.15);
     it.view = this.scene.add.container(it.x, it.y, [it.disc, pic]).setDepth(5);
     this.items.push(it);
     return it;
@@ -84,7 +94,7 @@ export class Deck {
     return this.add({
       id: `${state.me}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
       kind: Math.floor(Math.random() * PARTS.length),
-      x: W * (0.25 + Math.random() * 0.5), y: H * (0.3 + Math.random() * 0.4),
+      x: W * (0.25 + Math.random() * 0.5), y: H * (0.54 + Math.random() * 0.26),
     });
   }
 
@@ -94,26 +104,33 @@ export class Deck {
   }
 
   // ---------- throwing ----------
-  // Called when a part hits an edge moving outward. Returns true if it was handed to a crewmate.
+  // Called when a part hits an edge moving outward. Returns true if it left the screen.
   tryThrow(it, edge) {
     const out = edge === 'L' ? -it.vx : edge === 'R' ? it.vx : edge === 'T' ? -it.vy : it.vy;
-    if (out < SETTINGS.flingSpeed || !connected()) return false;
-    const p = targetFor(edge, it.x, it.y);
-    if (!p || p.away) return false; // nobody there to catch it
-    const msg = { t: 'throw', to: p.id, mode: state.mode, item: { id: it.id, kind: it.kind } };
-    if (state.mode === 'neighbors') {
-      // Phones side by side: keep height and velocity, so it reads as one continuous surface.
-      msg.edge = edge; msg.u = it.y / view.H; msg.vx = it.vx; msg.vy = it.vy;
-    } else {
-      // Send where in my portal it left, and its speed split into "out through the edge" and "along the edge".
-      const s = segments().find((s) => s.p.id === p.id);
-      const t = stripPos(edge, it.x, it.y), q = stripPoint(t);
-      msg.f = (t - s.t0) / (s.t1 - s.t0); msg.n = out; msg.s = it.vx * q.tx + it.vy * q.ty;
+
+    // A badge isn't sent anywhere: flinging it off an edge just tells us which way a crewmate is.
+    if (it.badge) {
+      if (edge === 'B' || out < BADGE_SPEED) return false;
+      it.state = 'leaving'; it.age = 0;
+      this.flash(it.x, it.y, hex(it.badge.color));
+      sfx.send(); buzz('LIGHT');
+      if (this.onBadge) this.onBadge(it.badge, it.x, it.y);
+      return true;
     }
-    send(msg);
+
+    if (out < SETTINGS.flingSpeed || !connected()) return false;
+    const portal = portalAt(edge, it.x, it.y);
+    if (!portal || portal.p.away) return false; // nobody there to catch it
+    // Say where in the portal it left, and its speed split into "out through the edge" and
+    // "along the edge". The other phone turns that into an arrival through its portal for me.
+    const t = stripPos(edge, it.x, it.y), q = stripPoint(t);
+    send({
+      t: 'throw', to: portal.p.id, item: { id: it.id, kind: it.kind }, edge,
+      f: (t - portal.t0) / (portal.t1 - portal.t0), n: out, s: it.vx * q.tx + it.vy * q.ty,
+    });
     // The part keeps sliding off-screen here; that animation covers the network delay.
     it.state = 'leaving'; it.age = 0;
-    this.flash(it.x, it.y, hex(p.color));
+    this.flash(it.x, it.y, hex(portal.p.color));
     sfx.send(); buzz('LIGHT');
     return true;
   }
@@ -122,14 +139,11 @@ export class Deck {
     const { W, H } = view;
     const it = { id: m.item.id, kind: m.item.kind || 0, state: 'entering' };
     const from = state.players.find((p) => p.id === m.from);
-    const s = m.mode === 'portals' ? segments().find((s) => s.p.id === m.from) : null;
-    if (m.mode === 'neighbors') {
-      it.x = m.edge === 'R' ? -R : W + R; // left their right edge, so it arrives on my left edge
-      it.y = clamp(m.u * H, R, H - R);
-      it.vx = m.vx; it.vy = m.vy;
-    } else if (s) {
-      // Mirror along the edge, as if we were facing each other across the portal.
-      const q = stripPoint(s.t1 - m.f * (s.t1 - s.t0));
+    const portal = portalFrom(m.from, m.edge);
+    if (portal) {
+      // Mirrored along the edge, as if we were facing each other through the portal. For two
+      // phones side by side that keeps the part at the same height, moving the same way.
+      const q = stripPoint(portal.t1 - m.f * (portal.t1 - portal.t0));
       it.x = q.x + q.nx * R; it.y = q.y + q.ny * R;
       it.vx = -q.nx * m.n - q.tx * m.s; it.vy = -q.ny * m.n - q.ty * m.s;
     } else {
@@ -155,6 +169,25 @@ export class Deck {
 
   onBounce(m) {
     this.add({ id: m.item.id, kind: m.item.kind || 0, x: view.W / 2, y: view.H / 2 });
+  }
+
+  // A crewmate tapped their fault: show what they need in a bubble at their door for a few seconds.
+  onAsk(m) {
+    const door = this.doors.get(m.from), p = state.players.find((x) => x.id === m.from), part = PARTS[m.kind];
+    if (!door || !p || !part) return;
+    const scene = this.scene;
+    const label = text(scene, 0, 0, `${part.e} ${part.name}!`, { size: 16, weight: '800', color: '#14161c' });
+    const w = label.width + 22, h = 34;
+    // Sits just inside the door, pushed in from the edge and kept on screen.
+    const x = clamp(door.x - door.nx * (DOOR + 12 + w / 2), w / 2 + 6, view.W - w / 2 - 6);
+    const y = clamp(door.y - door.ny * (DOOR + 12 + h / 2), h / 2 + 6, view.H - h / 2 - 6);
+    const bg = scene.add.graphics();
+    bg.fillStyle(hex(p.color), 1).fillRoundedRect(-w / 2, -h / 2, w, h, 10);
+    const bubble = scene.add.container(x, y, [bg, label]).setDepth(7).setScale(0.6);
+    scene.tweens.add({ targets: bubble, scale: 1, duration: 160, ease: 'Back.Out' });
+    scene.tweens.add({ targets: bubble, alpha: 0, delay: 3500, duration: 500, onComplete: () => bubble.destroy() });
+    this.flash(door.x - door.nx * DOOR, door.y - door.ny * DOOR, hex(p.color));
+    sfx.fault(); buzz('LIGHT');
   }
 
   // ---------- physics ----------
@@ -212,7 +245,7 @@ export class Deck {
     }
     for (const it of this.items) {
       it.view.setPosition(it.x, it.y).setScale(it.held ? 1.08 : 1);
-      it.disc.setFillStyle(it.held ? COLORS.buttonDown : COLORS.button);
+      if (!it.badge) it.disc.setFillStyle(it.held ? COLORS.buttonDown : it.base);
     }
   }
 
@@ -225,7 +258,7 @@ export class Deck {
       if (it.state !== 'in' || it.held) continue;
       if (Math.hypot(pointer.worldX - it.x, pointer.worldY - it.y) <= R * 1.35) hit = it;
     }
-    if (!hit) return;
+    if (!hit) { if (this.onTap) this.onTap(pointer.worldX, pointer.worldY); return; }
     hit.held = true; hit.vx = hit.vy = 0;
     this.items.splice(this.items.indexOf(hit), 1); this.items.push(hit);
     this.scene.children.bringToTop(hit.view);
@@ -259,7 +292,10 @@ export class Deck {
   }
 
   // ---------- drawing the fixed parts ----------
-  // Call when the crew, the mode or the screen size changes.
+  // How far in from the top edge things must sit to clear the notch.
+  static topInset() { return Math.max(0, view.safeTop - 8); }
+
+  // Call when the crew, the mode, where I pointed or the screen size changes.
   refresh() {
     const { W, H } = view, self = mySelf(), o = others();
 
@@ -267,13 +303,16 @@ export class Deck {
     // their screen to this phone.
     this.tint.setSize(W, H).setFillStyle(self ? hex(self.color) : 0xffffff, self ? 0.16 : 0);
 
-    // Portals: a coloured band along each stretch of edge, labelled with where it leads.
-    const g = this.portalG, T = 12, gap = 5;
+    // Portals: a coloured band along each crewmate's stretch of edge, and a round door with
+    // their room's icon and name at the spot that points at them.
+    const g = this.portalG, T = 12, gap = 5, inset = Deck.topInset();
     g.clear();
-    for (const l of this.portalLabels) l.destroy();
-    this.portalLabels = [];
-    for (const { p, t0, t1 } of portals()) {
-      g.fillStyle(hex(p.color), p.away ? 0.3 : 1); // a crewmate who dropped out keeps their place, dimmed
+    for (const b of this.portalBits) b.destroy();
+    this.portalBits = [];
+    this.doors.clear();
+    for (const { p, t0, t1, door } of this.hidePortals ? [] : portals()) {
+      const color = hex(p.color), alpha = p.away ? 0.3 : 1; // a crewmate who dropped out keeps their place, dimmed
+      g.fillStyle(color, alpha);
       const cuts = [t0, H, H + W, t1].filter((t) => t >= t0 && t <= t1).sort((a, b) => a - b);
       for (let i = 0; i < cuts.length - 1; i++) {
         const a = cuts[i] + (i === 0 ? gap : 0), b = cuts[i + 1] - (i === cuts.length - 2 ? gap : 0);
@@ -282,10 +321,22 @@ export class Deck {
         if (pa.nx !== 0) g.fillRect(pa.nx < 0 ? 0 : W - T, Math.min(pa.y, pb.y), T, Math.abs(pb.y - pa.y));
         else g.fillRect(Math.min(pa.x, pb.x), 0, Math.abs(pb.x - pa.x), T);
       }
-      const m = stripPoint((t0 + t1) / 2);
-      const label = text(this.scene, m.x - m.nx * 28, m.y - m.ny * 28, p.away ? `${p.name} is away` : `to ${p.name}`, { size: 15, weight: '700', color: p.color })
-        .setRotation(m.nx < 0 ? -Math.PI / 2 : m.nx > 0 ? Math.PI / 2 : 0).setDepth(2).setAlpha(p.away ? 0.45 : 1);
-      this.portalLabels.push(label);
+
+      // The door: kept clear of the corners, and below the notch on the top edge.
+      const m = stripPoint(door), top = edgeOf(door) === 'T';
+      const depth = T + DOOR + 2 + (top ? inset : 0);
+      const dx = top ? clamp(m.x, DOOR + T + 4, W - DOOR - T - 4) : m.x - m.nx * depth;
+      const dy = top ? depth : clamp(m.y, DOOR + T + 4 + inset, H - DOOR - 90);
+      g.fillStyle(0x14161c, 1).fillCircle(dx, dy, DOOR);
+      g.lineStyle(3, color, alpha).strokeCircle(dx, dy, DOOR);
+      this.portalBits.push(emoji(this.scene, dx, dy + 1, p.icon || '', DOOR * 1.05).setDepth(2).setAlpha(p.away ? 0.4 : 1));
+      const name = text(this.scene, 0, 0, p.away ? `${p.name} is away` : p.name, { size: 13, weight: '700', color: p.color })
+        .setDepth(2).setAlpha(p.away ? 0.45 : 1);
+      // The name runs along the edge beside the door: below it on the sides, to the right of it on top.
+      if (top) name.setOrigin(0, 0.5).setPosition(dx + DOOR + 6, dy);
+      else name.setRotation(m.nx < 0 ? -Math.PI / 2 : Math.PI / 2).setPosition(dx, dy + DOOR + 8 + name.width / 2);
+      this.portalBits.push(name);
+      this.doors.set(p.id, { x: dx, y: dy, nx: m.nx, ny: m.ny });
     }
 
     this.waiting.setPosition(W / 2, H * 0.66)
@@ -311,8 +362,8 @@ export class Deck {
   // Big "Your room is Engine" for a few seconds after joining.
   banner(self) {
     const { W, H } = view;
-    const a = text(this.scene, W / 2, H * 0.36, 'Your room is', { size: 20, weight: '500' }).setDepth(4);
-    const b = text(this.scene, W / 2, H * 0.36 + 52, self.name, { size: 64, weight: '800', color: self.color }).setDepth(4);
+    const a = text(this.scene, W / 2, H * 0.42, 'Your room is', { size: 20, weight: '500' }).setDepth(4);
+    const b = text(this.scene, W / 2, H * 0.42 + 52, `${self.icon || ''} ${self.name}`, { size: 56, weight: '800', color: self.color }).setDepth(4);
     this.scene.tweens.add({ targets: [a, b], alpha: 0, delay: 3000, duration: 1000,
       onComplete: () => { a.destroy(); b.destroy(); } });
   }

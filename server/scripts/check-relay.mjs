@@ -54,6 +54,7 @@ try {
   check('the server says which version it is on connecting', typeof a.last('hello')?.version === 'string');
   check('starting a crew gives a 4-letter code', /^[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(code || ''));
   check('whoever starts the crew is captain', a.last('room').captain === joinedA.id);
+  check('each room has an icon', a.last('room').players[0].icon === '🚀');
 
   const b = await phone();
   b.say({ t: 'join', code: 'AAAA' });
@@ -102,6 +103,11 @@ try {
   if (fault) {
     const owner = fault.owner === idA ? a : b, other = owner === a ? b : a;
     check('the part to fix it appears in the other room', other.log.some((m) => m.t === 'spawn' && m.item.kind === fault.kind));
+    owner.say({ t: 'ask', id: fault.id });
+    owner.say({ t: 'ask', id: fault.id });
+    await wait(200);
+    const asks = other.log.filter((m) => m.t === 'ask');
+    check('calling out for a part reaches the crew, once', asks.length === 1 && asks[0].kind === fault.kind && !owner.log.some((m) => m.t === 'ask'));
     owner.say({ t: 'fix', id: fault.id });
     await wait(200);
     check('fixing it scores a point', other.last('game').score === 1 && !other.last('game').faults.some((f) => f.id === fault.id));

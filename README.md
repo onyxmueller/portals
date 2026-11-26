@@ -18,11 +18,17 @@ the crew is the captain (★) and is the one who can launch. Any number of crews
 If your phone drops out (it sleeps, or switches between Wi-Fi and cellular), your room is held
 for a minute and you get it back when you reconnect, even if you closed the app in between.
 
+**Pointing out your crew.** In the lobby, tap **Point out your crew**. A badge appears for each
+crewmate in turn; fling it toward where they're actually sitting. From then on that crewmate's
+door is on that part of your screen's edge, so you throw at the person. Each phone does this for
+itself, and remembers it. Skip it and the game uses the simpler mapping chosen in Settings.
+
 The captain presses **Launch** when everyone is aboard. Then:
 
 - **Faults** appear in your room with a ring that drains as time runs out, and the part they need
   ("Fire, needs Extinguisher").
-- The part turns up in **someone else's room**, so shout for it. They fling it to you; drop it on
+- The part turns up in **someone else's room**, so shout for it. You can also **tap the fault**:
+  your crewmates see what you need in a bubble on the door that points at you. They fling it to you; drop it on
   the fault to fix it. A good throw can land straight on the fault.
 - A fault that runs out costs the shared **hull** 15%. At zero the ship is lost. The score is how
   many faults the crew fixed.
@@ -30,8 +36,11 @@ The captain presses **Launch** when everyone is aboard. Then:
 - Spare parts pile up. Leave one on the **airlock** to throw it away.
 
 Before launch the ship is docked and you can practise throwing. To fling: drag a part and let go.
-Hit an edge fast enough and it travels; too slow and it bounces back. Settings switches how edges
-map to rooms (for everyone):
+Hit an edge fast enough and it travels; too slow and it bounces back. However hard you throw, a
+part arrives at a steady speed so it doesn't sail across the next phone.
+
+For phones that haven't pointed out their crew, Settings chooses how edges map to rooms (for
+everyone):
 
 - **Neighbors**: left edge goes to the room on your left, right edge to the room on your right.
   Seating order is join order.
@@ -58,6 +67,7 @@ Testing shortcuts you can add to the address (join several with `&`):
 | `?join` | Open the Join screen |
 | `?crew=CODE` | Join that crew (this is what invite links use) |
 | `?invite`, `?settings` | Open that panel in the lobby |
+| `?point` | Start pointing out the crew as soon as there is one |
 | `?fresh` | Forget the crew this browser was last in (handy with several tabs) |
 
 ## Native apps (iOS and Android)
@@ -111,7 +121,7 @@ installs the server's packages.
 | `src/config/settings.js` | Part size, fling speed, friction, colours, the live server's address |
 | `src/config/parts.js` | The parts and the fault each one fixes |
 | `src/deck/Deck.js` | The play area: parts, portals along the edges, dragging, and the throw physics |
-| `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to |
+| `src/throw/edges.js` | Which crewmate each stretch of screen edge leads to, including where you pointed |
 | `src/scenes/` | The screens: title, home (start or join a crew), join (type a code), lobby (docked), game (flying), results (ship lost) |
 | `src/ui/` | Buttons, sharp text, the Settings panel and the Invite panel (crew code and QR) |
 | `src/net.js` | The connection to the game server |

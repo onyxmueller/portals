@@ -4,6 +4,7 @@ import { view } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
 import { net, state, send, isCaptain, leaveCrew } from '../net.js';
 import { text, button } from './widgets.js';
+import { hasAim, setAim } from '../throw/edges.js';
 
 const HELP = {
   neighbors: 'Phones in a row or circle. Your left edge leads to the room on your left, your right edge to the room on your right.',
@@ -26,6 +27,13 @@ export function openSettings(scene) {
   const help = text(scene, 0, y, '', { size: 12, color: COLORS.dim }).setWordWrapWidth(pw - 36);
   panel.add(help);
   y += 44;
+  // If this phone has pointed out where its crewmates sit, that wins over the choice above.
+  if (hasAim()) {
+    panel.add(text(scene, 0, y - 6, 'This phone is using where you pointed instead.', { size: 12, color: '#ffd43b' }));
+    y += 26;
+    place(button(scene, 'Forget where I pointed', () => { setAim(null); scene.deck.refresh(); close(); }, { w: pw - 32, h: 36 }), 0);
+    y += 44;
+  }
 
   heading('FEEL (THIS PHONE)');
   // A row with a label and - / + buttons that nudge one of the SETTINGS numbers.

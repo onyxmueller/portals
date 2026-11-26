@@ -71,6 +71,8 @@ Built so far, as a prototype:
 - Built on Phaser 3 + Vite, with separate screens for title, home, join, lobby, game and results.
 - Crews: start one and share a code, QR code or link; a captain who launches; rooms held for a
   minute when a phone drops out; any number of crews at once.
+- Pointing out your crew, so each door on your screen points at the real person; tap a fault to
+  call out for the part.
 - iOS and Android apps (Capacitor) that use the same page.
 - The spaceship game: rooms, faults with timers, parts that appear in another room, a shared
   hull, a score, an airlock for junk, and difficulty that climbs.
@@ -100,7 +102,7 @@ Rebuild the page on Phaser 3 + Vite. Same game, no new features.
 
 **Done when:** the rebuilt game plays the same as the prototype on both phones.
 
-### Phase 2: Crews (built, waiting for a real two-group test)
+### Phase 2: Crews (done)
 
 Any group can start their own journey.
 
@@ -118,7 +120,7 @@ Left for later, on purpose:
 - **Invite links that open the app** when it's installed. That needs the app-store setup from
   Phase 7; until then links always open the web game.
 
-### Phase 3: Where is my crewmate
+### Phase 3: Where is my crewmate (built except the compass experiment)
 
 Each portal on your screen points at the real person.
 
@@ -131,6 +133,11 @@ Each portal on your screen points at the real person.
 
 **Done when:** a new group can sit down anywhere, calibrate, and throw to the right person
 without thinking about it.
+
+Built: throw to calibrate (called "Point out your crew" in the game), doors with room icons and
+names, and the request ping (tap your fault). Still to try: the compass experiment, which needs
+real phones in a real room to judge. Where you pointed is already stored as a direction, not a
+spot on the edge, so the compass can turn those directions as the phone turns.
 
 ### Phase 4: Levels and story
 

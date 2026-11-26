@@ -22,6 +22,7 @@ export class GameScene extends Phaser.Scene {
     setupCamera(this);
     this.deck = new Deck(this);
     this.deck.onStep = () => this.checkSockets();
+    this.deck.onTap = (x, y) => this.callOut(x, y);
     this.faults = []; // faults in my room: { id, kind, ttl, deadline, slot, done }
 
     this.airlockG = this.add.graphics().setDepth(1);
@@ -52,6 +53,9 @@ export class GameScene extends Phaser.Scene {
     followResize(this);
   }
 
+  // The hull bar sits below any doors on the top edge.
+  hullY() { return Deck.topInset() + 78; }
+
   slotPos(slot) { return { x: view.W * (slot === 0 ? 0.3 : 0.7), y: view.safeTop + view.H * 0.27 }; }
   airlockPos() { return { x: view.W / 2, y: view.H - 135 }; }
 
@@ -62,7 +66,7 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(0x0b0c10, 1).fillCircle(air.x, air.y, AR);
     g.lineStyle(3, 0x495057, 1).strokeCircle(air.x, air.y, AR);
     this.airlockLabel.setPosition(air.x, air.y + AR + 12);
-    this.hullText.setPosition(W / 2, safeTop + 48);
+    this.hullText.setPosition(W / 2, this.hullY() + 18);
     this.damage.setSize(W, H);
     rowFromRight(this.buttons, W - 10, H - safeBottom - 28);
     this.deck.refresh();
@@ -92,6 +96,19 @@ export class GameScene extends Phaser.Scene {
     for (const f of this.faults) if (f.slot < 0) f.slot = this.faults.some((x) => x.slot === 0) ? 1 : 0;
   }
 
+  // Tapping one of my faults calls out for the part: crewmates see what I need in a bubble
+  // on the portal that points at me. (Shouting still works, and is more fun.)
+  callOut(x, y) {
+    for (const f of this.faults) {
+      const p = this.slotPos(f.slot);
+      if (f.done || Math.hypot(x - p.x, y - p.y) > SR + 12) continue;
+      send({ t: 'ask', id: f.id });
+      this.deck.flash(p.x, p.y, COLORS.warn);
+      sfx.send(); buzz('LIGHT');
+      return;
+    }
+  }
+
   // A part touching a fault it matches fixes it. A part left on the airlock is thrown away.
   checkSockets() {
     const air = this.airlockPos();
@@ -118,8 +135,8 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- drawing ----------
   drawHull() {
-    const { W, safeTop } = view, g = this.hullG, game = state.game;
-    const y = safeTop + 30, bw = Math.min(W - 120, 260), bx = (W - bw) / 2, k = game.hull / 100;
+    const { W } = view, g = this.hullG, game = state.game;
+    const y = this.hullY(), bw = Math.min(W - 120, 260), bx = (W - bw) / 2, k = game.hull / 100;
     g.clear();
     g.fillStyle(0x343a40, 1).fillRect(bx, y - 5, bw, 10);
     g.fillStyle(k > 0.5 ? COLORS.good : k > 0.25 ? COLORS.warn : COLORS.bad, 1).fillRect(bx, y - 5, bw * k, 10);

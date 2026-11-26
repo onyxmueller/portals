@@ -28,11 +28,12 @@ const SILENCE_LIMIT = 6000;  // a phone that says nothing for this long (ms) is 
 const AWAY_GRACE = 60000;    // how long a cut-off phone's room is held for it to come back
 const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ'; // no vowels, so codes never spell words
 const CODE_LENGTH = 4;
-// Each player is a room on the ship, with a colour.
+// Each player is a room on the ship, with a colour and an icon.
 const COLORS = [
-  ['Engine', '#ff6b6b'], ['Bridge', '#4dabf7'], ['Garden', '#94d82d'], ['Reactor', '#ffd43b'],
-  ['Lab', '#b197fc'], ['Medbay', '#38d9a9'], ['Cargo', '#ffa94d'], ['Hangar', '#f783ac'],
+  ['Engine', '#ff6b6b', '🚀'], ['Bridge', '#4dabf7', '🧭'], ['Garden', '#94d82d', '🌱'], ['Reactor', '#ffd43b', '⚡'],
+  ['Lab', '#b197fc', '🔬'], ['Medbay', '#38d9a9', '🩺'], ['Cargo', '#ffa94d', '📦'], ['Hangar', '#f783ac', '🛸'],
 ];
+const ASK_GAP = 1500; // a player can call out for a part at most this often (ms)
 const MODES = ['neighbors', 'portals'];
 
 // code -> { code, mode, captain, players: [{ id, name, color, token, ws, away, awaySince }], game }
@@ -59,7 +60,7 @@ function newCode() {
 function broadcastRoom(crew) {
   const msg = {
     t: 'room', code: crew.code, mode: crew.mode, captain: crew.captain,
-    players: crew.players.map(({ id, name, color, away }) => ({ id, name, color, away })),
+    players: crew.players.map(({ id, name, color, icon, away }) => ({ id, name, color, icon, away })),
   };
   for (const p of crew.players) send(p.ws, msg);
 }
@@ -135,8 +136,8 @@ const log = (crew, text) => console.log(`[${crew.code}] ${text} (${aboard(crew).
 // Give a connection a new room in a crew.
 function seat(conn, crew) {
   const used = new Set(crew.players.map((p) => p.color));
-  const [name, color] = COLORS.find(([, c]) => !used.has(c));
-  const player = { id: nextId++, name, color, token: crypto.randomBytes(12).toString('hex'), ws: conn.ws, away: false };
+  const [name, color, icon] = COLORS.find(([, c]) => !used.has(c));
+  const player = { id: nextId++, name, color, icon, token: crypto.randomBytes(12).toString('hex'), ws: conn.ws, away: false };
   crew.players.push(player);
   if (crew.captain == null) crew.captain = player.id;
   welcome(conn, crew, player);
@@ -302,6 +303,13 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'end' && captain) {
       crew.game = newGame();
       broadcastGame(crew, 'end');
+    } else if (m.t === 'ask') {
+      // "I need this part!" Shown to the rest of the crew on the portal that points at the asker.
+      const fault = crew.game.faults.find((f) => f.id === m.id && f.owner === player.id);
+      const now = Date.now();
+      if (!fault || now - (player.lastAsk || 0) < ASK_GAP) return;
+      player.lastAsk = now;
+      for (const p of crew.players) if (p !== player) send(p.ws, { t: 'ask', from: player.id, kind: fault.kind });
     } else if (m.t === 'fix') {
       const g = crew.game;
       const fault = g.faults.find((f) => f.id === m.id && f.owner === player.id);

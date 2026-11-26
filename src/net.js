@@ -8,6 +8,7 @@
 //   'throw'   a part is arriving from another phone
 //   'spawn'   the server put a new part in my room
 //   'bounce'  a part I threw had nowhere to go and came back
+//   'ask'     a crewmate is calling out for a part
 //   'ping'    a fresh round-trip time
 import Phaser from 'phaser';
 import { NATIVE } from './native.js';
@@ -131,7 +132,7 @@ export function connect() {
       if (state.pings.length > 30) state.pings.shift();
       net.emit('ping');
     }
-    else if (m.t === 'throw' || m.t === 'spawn' || m.t === 'bounce') net.emit(m.t, m);
+    else if (m.t === 'throw' || m.t === 'spawn' || m.t === 'bounce' || m.t === 'ask') net.emit(m.t, m);
   };
   ws.onclose = () => {
     state.online = false; state.pingMs = null; state.pings = [];
