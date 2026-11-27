@@ -29,6 +29,7 @@ export class GameScene extends Phaser.Scene {
   create() {
     setupCamera(this);
     this.deck = new Deck(this);
+    this.deck.briefStatus = true;
     this.deck.onStep = () => this.checkSockets();
     this.deck.onTap = (x, y, pointer) => { if (!this.startWork(x, y, pointer)) this.callOut(x, y); };
     this.faults = []; // faults in my room: { id, kind, ttl, deadline, spot (which of SPOTS), done }

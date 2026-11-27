@@ -151,7 +151,7 @@ export class LobbyScene extends Phaser.Scene {
     const alone = others().length === 0, lv = state.game.level;
     this.hint.setPosition(lx, y).setText(
       (lv ? `Next: leg ${lv.n + 1}, ${lv.name}\n` : '') +
-      (alone ? '' : isCaptain() ? 'Press Launch when everyone is aboard.' : `${captainName()} launches when everyone is aboard.`));
+      (alone ? 'Tap Invite to bring your crew aboard.' : isCaptain() ? 'Press Launch when everyone is aboard.' : `${captainName()} launches when everyone is aboard.`));
     this.point.setPosition(lx, y + 50).setVisible(!alone).setLabel(hasAim() ? 'Point out your crew again' : 'Point out your crew');
 
     // Right: who's aboard, one row each (two columns once the crew is big), with their room's

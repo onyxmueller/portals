@@ -10,7 +10,7 @@ import { PARTS } from '../config/parts.js';
 import { STATIONS } from '../config/stations.js';
 import { net, state, send, connected, mySelf, others } from '../net.js';
 import { portals, portalAt, portalFrom, stripPos, stripPoint, edgeOf } from '../throw/edges.js';
-import { text, icon, hex } from '../ui/widgets.js';
+import { text, icon, hex, disc } from '../ui/widgets.js';
 import { roomIcon } from '../ui/icons.js';
 import { sfx, initAudio } from '../audio/sfx.js';
 import { buzz } from '../native.js';
@@ -33,13 +33,13 @@ export class Deck {
     this.onStep = null;     // the game scene hooks in here to check faults and the airlock
     this.onBadge = null;    // called with (crewmate, x, y) when a badge is flung off an edge
     this.onTap = null;      // called with (x, y, pointer) when a finger goes down on empty deck
+    this.briefStatus = false; // true while flying: the status line leaves room for the hull bar
     this.hidePortals = false;
 
     this.backG = scene.add.graphics().setDepth(0); // the backdrop: an orbit line, and a planet along the bottom
     this.portalG = scene.add.graphics().setDepth(2);
     this.portalBits = [];   // the icons and names drawn on the portals
     this.doors = new Map(); // player id -> where their door is, for speech bubbles: { x, y, nx, ny }
-    this.waiting = text(scene, 0, 0, '', { size: 14, color: COLORS.dim }).setDepth(2);
     this.status = text(scene, 0, 0, '', { size: 13, weight: '700', color: COLORS.onPlanet, align: 'left' }).setOrigin(0, 0.5).setDepth(10);
 
     scene.input.on('pointerdown', this.onDown, this);
@@ -338,8 +338,8 @@ export class Deck {
     // door on their screen to this phone. Nothing else sits behind the play area but a faint orbit.
     const back = this.backG, rise = Deck.rise(), pr = (W * W / 4 + DIP * DIP) / (2 * DIP);
     back.clear();
-    back.lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, H * 0.62);
-    back.fillStyle(self ? hex(self.color) : COLORS.planet, 1).fillCircle(W / 2, rise + pr, pr);
+    disc(back.lineStyle(2, COLORS.button, 1), W / 2, H * 0.5, H * 0.62, { stroke: true });
+    disc(back.fillStyle(self ? hex(self.color) : COLORS.planet, 1), W / 2, rise + pr, pr);
 
     // Doors: each crewmate has a half-round door in their colour poking in from the edge at the
     // spot that points at them, with their room's picture in it, and a thin band of their colour
@@ -380,9 +380,6 @@ export class Deck {
       this.doors.set(p.id, { x: ix, y: iy, cx, cy, nx: m.nx, ny: m.ny });
     }
 
-    this.waiting.setPosition(W / 2, H * 0.6)
-      .setText(o.length || !self ? '' : 'Waiting for crew to join…\nTap Invite to bring someone aboard.');
-
     this.status.setPosition(view.safeLeft + 16, Deck.rowY()); // on the planet, at the left
     this.refreshStatus();
 
@@ -393,7 +390,7 @@ export class Deck {
 
   refreshStatus() {
     const self = mySelf();
-    const ping = state.pingMs != null ? ` · ${state.pingMs}ms (worst ${Math.max(...state.pings)})` : '';
+    const ping = state.pingMs != null && !this.briefStatus ? ` · ${state.pingMs}ms (worst ${Math.max(...state.pings)})` : '';
     const here = state.players.filter((p) => !p.away).length;
     this.status.setText(!state.online ? 'Reconnecting…' : self ? `${self.name} · ${here} aboard${ping}` : 'Connecting…');
   }

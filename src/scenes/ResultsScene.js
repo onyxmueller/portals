@@ -5,7 +5,7 @@ import Phaser from 'phaser';
 import { view, setupCamera } from '../view.js';
 import { COLORS } from '../config/settings.js';
 import { net, state, send, isCaptain, captainName, leaveCrew } from '../net.js';
-import { text, icon, button } from '../ui/widgets.js';
+import { text, icon, button, disc } from '../ui/widgets.js';
 import { sfx } from '../audio/sfx.js';
 import { buzz } from '../native.js';
 import { followPhase, followResize } from './route.js';
@@ -30,8 +30,8 @@ export class ResultsScene extends Phaser.Scene {
       { size: 16 }).setLineSpacing(5);
     // The manual has the last word, in its own typewriter voice.
     this.manual = text(this, 0, 0,
-      won ? `HULL LEFT ........ ${g.hull}%\nFAULTS FIXED ... ${g.score}/${g.goal}` : 'Ship\'s manual, page 1:\n"In the event of losing the ship, try not to."',
-      { size: 12, mono: true, italic: !won, color: COLORS.dim, align: won ? 'left' : 'center' }).setLineSpacing(5);
+      won ? `HULL LEFT ${g.hull}%  ·  FAULTS FIXED ${g.score}/${g.goal}` : 'Ship\'s manual, page 1:\n"In the event of losing the ship, try not to."',
+      { size: 12, mono: true, italic: !won, color: COLORS.dim, align: 'center' }).setLineSpacing(5);
     // Winning: on to the next leg (after the last one, the journey starts again). Losing: try this leg again.
     this.next = button(this, !won ? 'TRY AGAIN' : last ? 'FLY IT ALL AGAIN' : 'NEXT LEG',
       () => send({ t: won ? 'launch' : 'go' }), { w: 240, h: 50, kind: 'primary' });
@@ -59,10 +59,10 @@ export class ResultsScene extends Phaser.Scene {
     if (won) {
       // The planet they were flying to fills the bottom of the poster.
       const top = H * 0.7, r = W * 1.4;
-      b.fillStyle(COLORS.planet, 1).fillCircle(W / 2, top + r, r);
-      b.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 60, top + 60 + r, r);
+      disc(b.fillStyle(COLORS.planet, 1), W / 2, top + r, r);
+      disc(b.fillStyle(0xd9772f, 1), W / 2 + 60, top + 60 + r, r);
     } else {
-      b.fillStyle(0x5a4a2a, 1).fillCircle(W * 0.9, H * 0.95, H * 0.5); // far off and dim
+      disc(b.fillStyle(0x5a4a2a, 1), W * 0.9, H * 0.95, H * 0.5); // far off and dim
     }
     b.fillStyle(won ? COLORS.cream : COLORS.line, 1);
     for (const [x, y] of [[0.08, 0.2], [0.9, 0.14], [0.8, 0.5], [0.14, 0.56], [0.3, 0.1]]) b.fillCircle(W * x, H * y, 2);
@@ -75,9 +75,8 @@ export class ResultsScene extends Phaser.Scene {
     this.stars.forEach((s, i) => s.setDisplaySize(38, 38).setPosition(W / 2 + (i - 1) * 50, y));
     y += this.stars.length ? 32 : -8;
     this.words.setWordWrapWidth(Math.min(W - 120, 520)).setOrigin(0.5, 0).setPosition(W / 2, y); y += this.words.height + 10;
-    // The manual's stats sit to one side when won; its joke sits under the words when lost.
-    if (won) this.manual.setOrigin(0, 0.5).setPosition(view.safeLeft + 36, H * 0.42);
-    else this.manual.setOrigin(0.5, 0).setPosition(W / 2, y + 4);
+    // The manual's line (stats when won, its joke when lost) sits under the words.
+    this.manual.setOrigin(0.5, 0).setPosition(W / 2, y + 4);
     this.ship.setPosition(W * 0.84, H * (won ? 0.4 : 0.34));
 
     const by = H - safeBottom - 46;

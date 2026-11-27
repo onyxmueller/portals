@@ -23,7 +23,6 @@ measure();
 // so it comes out the right size. Each scene's camera zooms by DPR (see view.js), so game
 // code works in screen points. The game's edges matter here: they are the portals.
 const size = () => [Math.round(view.W * DPR), Math.round(view.H * DPR)];
-const [width, height] = size();
 
 // The first scene only hands the game its pictures, then shows the title.
 class BootScene extends Phaser.Scene {
@@ -39,7 +38,7 @@ Promise.all([drawIcons(), ...fonts.map((f) => document.fonts.load(f).catch(() =>
     type: Phaser.AUTO,
     parent: 'game',
     backgroundColor: COLORS.background,
-    scale: { mode: Phaser.Scale.NONE, width, height, zoom: 1 / DPR },
+    scale: { mode: Phaser.Scale.NONE, width: size()[0], height: size()[1], zoom: 1 / DPR },
     input: { activePointers: 4 }, // several fingers can drag parts at once
     disableContextMenu: true,
     scene: [BootScene, TitleScene, HomeScene, JoinScene, LobbyScene, StoryScene, GameScene, ResultsScene],
@@ -55,9 +54,19 @@ Promise.all([drawIcons(), ...fonts.map((f) => document.fonts.load(f).catch(() =>
   };
 });
 
-window.addEventListener('resize', () => {
+// Measure again whenever the screen might have changed, and re-lay everything out if it has.
+// A resize isn't the only time: on an iPhone the notch and home-bar sizes read as zero for a
+// moment after the app opens and arrive later without any event, so we also keep checking.
+let seen = JSON.stringify(view);
+function remeasure() {
   measure();
+  const now = JSON.stringify(view);
+  if (now === seen) return;
+  seen = now;
   if (window.game) window.game.scale.resize(...size()); // every scene re-lays itself out on this
-});
+}
+window.addEventListener('resize', remeasure);
+window.addEventListener('orientationchange', remeasure);
+setInterval(remeasure, 400);
 
 connect();

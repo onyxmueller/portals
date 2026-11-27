@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { view, setupCamera } from '../view.js';
 import { COLORS } from '../config/settings.js';
 import { state } from '../net.js';
-import { text } from '../ui/widgets.js';
+import { text, disc } from '../ui/widgets.js';
 import { initAudio } from '../audio/sfx.js';
 import { sceneFor, followResize } from './route.js';
 
@@ -29,9 +29,9 @@ export class TitleScene extends Phaser.Scene {
   layout() {
     const { W, H } = view, r = W * 1.4;
     // A planet rising, an orbit, a few stars: the poster the rest of the game is cut from.
-    this.back.clear().lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, H * 0.62);
-    this.back.fillStyle(COLORS.planet, 1).fillCircle(W / 2, H * 0.72 + r, r);
-    this.back.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 60, H * 0.72 + 60 + r, r);
+    disc(this.back.clear().lineStyle(2, COLORS.button, 1), W / 2, H * 0.5, H * 0.62, { stroke: true });
+    disc(this.back.fillStyle(COLORS.planet, 1), W / 2, H * 0.72 + r, r);
+    disc(this.back.fillStyle(0xd9772f, 1), W / 2 + 60, H * 0.72 + 60 + r, r);
     this.back.fillStyle(COLORS.cream, 1);
     for (const [x, y] of [[0.12, 0.13], [0.86, 0.1], [0.78, 0.5], [0.16, 0.56], [0.5, 0.07]]) this.back.fillCircle(W * x, H * y, 2);
     this.title.setPosition(W / 2, H * 0.32);

@@ -66,3 +66,11 @@ export function rowFromRight(buttons, right, y, gap = 8) {
     x -= b.bw + gap;
   }
 }
+
+// A big circle with a smooth edge. Phaser draws every circle with the same few straight
+// sides, which shows as corners on something the size of a planet; this uses as many as it needs.
+export function disc(g, x, y, r, { stroke = false } = {}) {
+  const n = Math.round(Phaser.Math.Clamp(r * 0.6, 48, 2048)), pts = [];
+  for (let i = 0; i < n; i++) pts.push(new Phaser.Geom.Point(x + r * Math.cos((i / n) * Math.PI * 2), y + r * Math.sin((i / n) * Math.PI * 2)));
+  return stroke ? g.strokePoints(pts, true, true) : g.fillPoints(pts, true);
+}
