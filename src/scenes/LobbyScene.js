@@ -35,7 +35,7 @@ export class LobbyScene extends Phaser.Scene {
     this.askHow = text(this, 0, 0, 'Fling the badge toward them.', { size: 15, color: COLORS.dim }).setDepth(3);
 
     this.invite = button(this, 'Invite', () => openInvite(this));
-    this.launch = button(this, 'LAUNCH', () => send({ t: 'launch' }), { h: 50, kind: 'primary' });
+    this.launch = button(this, 'LAUNCH', () => send({ t: 'launch' }), { h: 44, kind: 'primary' });
     this.settings = button(this, 'Settings', () => openSettings(this));
     this.cancel = button(this, 'Cancel', () => this.stopPointing(false));
 
@@ -92,7 +92,7 @@ export class LobbyScene extends Phaser.Scene {
 
   nextBadge() {
     for (const it of this.deck.items.filter((it) => it.badge && it.state !== 'leaving')) this.deck.remove(it);
-    this.deck.add({ id: 'badge', badge: this.pointing.queue[0], x: view.W / 2, y: view.H * 0.6 });
+    this.deck.add({ id: 'badge', badge: this.pointing.queue[0], x: view.W / 2, y: view.H * 0.62 });
     this.layout();
   }
 
@@ -116,9 +116,12 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   // ---------- layout ----------
+  // Wide: the crew code and what to do on the left, who's aboard on the right, parts to
+  // practise with in between, and the buttons on the planet along the bottom.
   layout() {
-    const { W, H, safeBottom } = view, pointing = !!this.pointing;
-    let y = Deck.topInset() + 88; // below any doors on the top edge
+    const { W } = view, pointing = !!this.pointing;
+    const y0 = Deck.inset('T') + 66; // below any doors on the top edge
+    const row = Deck.rowY(), right = W - view.safeRight - 10;
 
     for (const t of this.roster) t.destroy();
     this.roster = [];
@@ -127,47 +130,47 @@ export class LobbyScene extends Phaser.Scene {
 
     if (pointing) {
       const p = this.pointing.queue[0];
-      this.askWhere.setPosition(W / 2, y);
-      this.askWho.setPosition(W / 2, y + 46).setText(p ? `${p.name.toUpperCase()}?` : '').setColor(p ? p.color : COLORS.text);
-      this.askHow.setPosition(W / 2, y + 92);
-      rowFromRight([this.cancel], W - 10, H - safeBottom - 30);
+      this.askWhere.setPosition(W / 2, y0);
+      this.askWho.setPosition(W / 2, y0 + 44).setText(p ? `${p.name.toUpperCase()}?` : '').setColor(p ? p.color : COLORS.text);
+      this.askHow.setPosition(W / 2, y0 + 86);
+      rowFromRight([this.cancel], right, row);
       this.deck.refresh();
       return;
     }
 
-    this.codeLabel.setPosition(W / 2, y); y += 20;
-    const letters = (state.crew || '').split(''), tw = 48, th = 58, gap = 8, x0 = W / 2 - (4 * tw + 3 * gap) / 2;
+    // Left: the crew code as four cream tickets, then what happens next.
+    const lx = W * 0.3, letters = (state.crew || '').split(''), tw = 44, th = 52, gap = 8, x0 = lx - (4 * tw + 3 * gap) / 2;
+    let y = y0;
+    this.codeLabel.setPosition(lx, y); y += 16;
     this.codeG.clear().fillStyle(COLORS.cream, 1);
     this.codeLetters.forEach((t, i) => {
       this.codeG.fillRect(x0 + i * (tw + gap), y, tw, th);
       t.setText(letters[i] || '').setPosition(x0 + i * (tw + gap) + tw / 2, y + th / 2);
     });
-    y += th + 16;
-
-    // Who's aboard: one row each, with their room's colour and picture, a star for the
-    // captain, "(you)" for me, and dimmed if they've dropped out.
-    const rw = Math.min(W - 150, 250), rh = 36;
-    for (const p of state.players) {
-      const left = W / 2 - rw / 2, cy = y + rh / 2, a = p.away ? 0.45 : 1;
-      const g = this.add.graphics().setDepth(3).setAlpha(a);
-      g.fillStyle(COLORS.panel, 1).fillRect(left, y, rw, rh);
-      g.fillStyle(hex(p.color), 1).fillCircle(left + 20, cy, 12);
-      this.roster.push(g, icon(this, left + 20, cy, roomIcon(p.name), 15).setDepth(3).setAlpha(a));
-      const name = `${p.name}${p.id === state.me ? ' (you)' : ''}`;
-      this.roster.push(text(this, left + 40, cy, name, { size: 15, weight: '700' }).setOrigin(0, 0.5).setDepth(3).setAlpha(a));
-      if (p.away) this.roster.push(text(this, left + rw - 10, cy, 'away', { size: 13, color: COLORS.dim }).setOrigin(1, 0.5).setDepth(3));
-      else if (p.id === state.captain) this.roster.push(icon(this, left + rw - 18, cy, 'star', 16, COLORS.warn).setDepth(3));
-      y += rh + 6;
-    }
-
+    y += th + 28;
     const alone = others().length === 0, lv = state.game.level;
-    this.hint.setPosition(W / 2, y + 22).setText(
+    this.hint.setPosition(lx, y).setText(
       (lv ? `Next: leg ${lv.n + 1}, ${lv.name}\n` : '') +
       (alone ? '' : isCaptain() ? 'Press Launch when everyone is aboard.' : `${captainName()} launches when everyone is aboard.`));
-    this.point.setPosition(W / 2, y + 70).setVisible(!alone).setLabel(hasAim() ? 'Point out your crew again' : 'Point out your crew');
+    this.point.setPosition(lx, y + 50).setVisible(!alone).setLabel(hasAim() ? 'Point out your crew again' : 'Point out your crew');
+
+    // Right: who's aboard, one row each (two columns once the crew is big), with their room's
+    // colour and picture, a star for the captain, "(you)" for me, dimmed if they've dropped out.
+    const cols = state.players.length > 4 ? 2 : 1, rw = cols === 2 ? 150 : 220, rh = 32, rx = W * 0.7 - (cols * rw + (cols - 1) * 8) / 2;
+    state.players.forEach((p, i) => {
+      const left = rx + (i % cols) * (rw + 8), top = y0 - 8 + Math.floor(i / cols) * (rh + 6), cy = top + rh / 2, a = p.away ? 0.45 : 1;
+      const g = this.add.graphics().setDepth(3).setAlpha(a);
+      g.fillStyle(COLORS.panel, 1).fillRect(left, top, rw, rh);
+      g.fillStyle(hex(p.color), 1).fillCircle(left + 18, cy, 11);
+      this.roster.push(g, icon(this, left + 18, cy, roomIcon(p.name), 14).setDepth(3).setAlpha(a));
+      const name = `${p.name}${p.id === state.me ? ' (you)' : ''}`;
+      this.roster.push(text(this, left + 36, cy, name, { size: 15, weight: '700' }).setOrigin(0, 0.5).setDepth(3).setAlpha(a));
+      if (p.away) this.roster.push(text(this, left + rw - 8, cy, 'away', { size: 13, color: COLORS.dim }).setOrigin(1, 0.5).setDepth(3));
+      else if (p.id === state.captain) this.roster.push(icon(this, left + rw - 16, cy, 'star', 15, COLORS.warn).setDepth(3));
+    });
 
     this.launch.setVisible(isCaptain());
-    rowFromRight([this.invite, this.launch, this.settings], W - 10, H - safeBottom - 30);
+    rowFromRight([this.invite, this.launch, this.settings], right, row);
     this.deck.refresh();
   }
 }

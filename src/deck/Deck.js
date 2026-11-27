@@ -16,8 +16,9 @@ import { sfx, initAudio } from '../audio/sfx.js';
 import { buzz } from '../native.js';
 
 const R = SETTINGS.partRadius;
-const DOOR = 46;          // radius of the half-round "door" that pokes in from the edge for each crewmate
-const PLANET = 100;       // how far the planet strip rises from the bottom of the screen
+const DOOR = 40;          // radius of the half-round "door" that pokes in from the edge for each crewmate
+const PLANET = 58;        // how far the planet strip rises from the bottom of the screen (at its middle)
+const DIP = 16;           // how much lower the planet's edge is at the sides of the screen than in the middle
 const BADGE_SPEED = 150;  // how fast a badge must leave the screen to count as pointing (gentler than a throw)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let bannerShownFor = null; // the "Your room is..." banner shows once per room colour
@@ -39,7 +40,7 @@ export class Deck {
     this.portalBits = [];   // the icons and names drawn on the portals
     this.doors = new Map(); // player id -> where their door is, for speech bubbles: { x, y, nx, ny }
     this.waiting = text(scene, 0, 0, '', { size: 14, color: COLORS.dim }).setDepth(2);
-    this.status = text(scene, 0, 0, '', { size: 13, weight: '700', color: COLORS.onPlanet }).setDepth(10);
+    this.status = text(scene, 0, 0, '', { size: 13, weight: '700', color: COLORS.onPlanet, align: 'left' }).setOrigin(0, 0.5).setDepth(10);
 
     scene.input.on('pointerdown', this.onDown, this);
     scene.input.on('pointermove', this.onMove, this);
@@ -105,7 +106,7 @@ export class Deck {
     return this.add({
       id: `${state.me}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
       kind: Math.floor(Math.random() * PARTS.filter((p) => p.fault).length),
-      x: W * (0.25 + Math.random() * 0.5), y: H * (0.54 + Math.random() * 0.26),
+      x: W * (0.3 + Math.random() * 0.4), y: H * (0.5 + Math.random() * 0.2),
     });
   }
 
@@ -190,7 +191,7 @@ export class Deck {
   onSpawn(m) {
     const { W, H } = view;
     const it = this.add({ id: m.item.id, kind: m.item.kind,
-      x: W * (0.2 + Math.random() * 0.6), y: H * (0.45 + Math.random() * 0.25) });
+      x: W * (0.25 + Math.random() * 0.5), y: H * (0.5 + Math.random() * 0.2) });
     this.flash(it.x, it.y, COLORS.cream);
   }
 
@@ -322,8 +323,12 @@ export class Deck {
   }
 
   // ---------- drawing the fixed parts ----------
-  // How far in from the top edge things must sit to clear the notch.
-  static topInset() { return Math.max(0, view.safeTop - 8); }
+  // How far in from an edge ('T', 'L' or 'R') a door must sit to clear the notch and rounded corners.
+  static inset(edge) { return Math.max(0, (edge === 'T' ? view.safeTop : edge === 'L' ? view.safeLeft : view.safeRight) - 8); }
+  // The planet strip along the bottom: where its top is (in the middle of the screen), and
+  // the height of the row of words and buttons that sits on it.
+  static rise() { return view.H - view.safeBottom - PLANET; }
+  static rowY() { return view.H - view.safeBottom - 25; }
 
   // Call when the crew, the mode, where I pointed, the stations or the screen size changes.
   refresh() {
@@ -331,15 +336,15 @@ export class Deck {
 
     // Backdrop. The planet along the bottom is my room's colour, so crewmates can match the
     // door on their screen to this phone. Nothing else sits behind the play area but a faint orbit.
-    const back = this.backG, rise = H - view.safeBottom - PLANET, pr = Math.max(W, 420) * 1.6;
+    const back = this.backG, rise = Deck.rise(), pr = (W * W / 4 + DIP * DIP) / (2 * DIP);
     back.clear();
-    back.lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.52, W * 0.73);
+    back.lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, H * 0.62);
     back.fillStyle(self ? hex(self.color) : COLORS.planet, 1).fillCircle(W / 2, rise + pr, pr);
 
     // Doors: each crewmate has a half-round door in their colour poking in from the edge at the
     // spot that points at them, with their room's picture in it, and a thin band of their colour
     // along the whole stretch of edge that leads to them.
-    const g = this.portalG, T = 6, gap = 5, inset = Deck.topInset();
+    const g = this.portalG, T = 6, gap = 5;
     g.clear();
     for (const b of this.portalBits) b.destroy();
     this.portalBits = [];
@@ -356,30 +361,29 @@ export class Deck {
         else g.fillRect(Math.min(pa.x, pb.x), 0, Math.abs(pb.x - pa.x), T);
       }
 
-      // The door itself: kept clear of the corners and the planet, and below the notch on the top edge.
-      const m = stripPoint(door), top = edgeOf(door) === 'T';
-      const cx = top ? clamp(m.x, DOOR + 8, W - DOOR - 8) : m.x;
-      const cy = top ? inset : clamp(m.y, DOOR + inset + 12, rise - DOOR - 34);
-      if (top && inset > 0) g.fillRect(cx - DOOR, 0, DOOR * 2, inset);
+      // The door itself: kept clear of the corners and the planet, and pushed in past the notch.
+      const m = stripPoint(door), edge = edgeOf(door), top = edge === 'T', inset = Deck.inset(edge);
+      const cx = top ? clamp(m.x, view.safeLeft + DOOR + 8, W - view.safeRight - DOOR - 8) : m.x - m.nx * inset;
+      const cy = top ? inset : clamp(m.y, DOOR + Deck.inset('T') + 12, rise - DOOR - 26);
+      if (inset > 0) top ? g.fillRect(cx - DOOR, 0, DOOR * 2, inset) : g.fillRect(m.nx < 0 ? 0 : W - inset, cy - DOOR, inset, DOOR * 2);
       g.fillCircle(cx, cy, DOOR);
       const ix = top ? cx : cx - m.nx * DOOR * 0.48, iy = top ? cy + DOOR * 0.48 : cy; // where the picture sits
-      this.portalBits.push(icon(this.scene, ix, iy, roomIcon(p.name), 28).setDepth(2).setAlpha(p.away ? 0.5 : 1));
+      this.portalBits.push(icon(this.scene, ix, iy, roomIcon(p.name), 26).setDepth(2).setAlpha(p.away ? 0.5 : 1));
       const station = (state.game.stations || []).find((s) => s.owner === p.id);
       const words = (p.away ? `${p.name} is away` : p.name) + (station && STATIONS[station.type] ? `\n${STATIONS[station.type].name} here` : '');
       const name = text(this.scene, 0, 0, words, { size: 14, weight: '700', color: p.color, align: top ? 'left' : m.nx < 0 ? 'left' : 'right' })
         .setDepth(2).setAlpha(p.away ? 0.6 : 1);
       // The name sits beside the door: to its right on the top edge, under it on the sides.
-      if (top) name.setOrigin(0, 0).setPosition(cx + DOOR + 8, inset + 10);
-      else name.setOrigin(m.nx < 0 ? 0 : 1, 0).setPosition(m.nx < 0 ? 10 : W - 10, cy + DOOR + 6);
+      if (top) name.setOrigin(0, 0).setPosition(cx + DOOR + 8, inset + 8);
+      else name.setOrigin(m.nx < 0 ? 0 : 1, 0).setPosition(m.nx < 0 ? inset + 10 : W - inset - 10, cy + DOOR + 5);
       this.portalBits.push(name);
       this.doors.set(p.id, { x: ix, y: iy, cx, cy, nx: m.nx, ny: m.ny });
     }
 
-    this.waiting.setPosition(W / 2, H * 0.66)
+    this.waiting.setPosition(W / 2, H * 0.6)
       .setText(o.length || !self ? '' : 'Waiting for crew to join…\nTap Invite to bring someone aboard.');
 
-    const sy = rise + 22; // along the top of the planet, above the buttons
-    this.status.setPosition(W / 2, sy);
+    this.status.setPosition(view.safeLeft + 16, Deck.rowY()); // on the planet, at the left
     this.refreshStatus();
 
     for (const it of this.items) if (it.state === 'in') { it.x = clamp(it.x, R, W - R); it.y = clamp(it.y, R, H - R); }

@@ -27,15 +27,15 @@ export class TitleScene extends Phaser.Scene {
   }
 
   layout() {
-    const { W, H } = view, r = W * 1.05;
+    const { W, H } = view, r = W * 1.4;
     // A planet rising, an orbit, a few stars: the poster the rest of the game is cut from.
-    this.back.clear().lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, W * 0.73);
-    this.back.fillStyle(COLORS.planet, 1).fillCircle(W / 2, H * 0.74 + r, r);
-    this.back.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 30, H * 0.74 + 110 + r * 0.8, r * 0.8);
+    this.back.clear().lineStyle(2, COLORS.button, 1).strokeCircle(W / 2, H * 0.5, H * 0.62);
+    this.back.fillStyle(COLORS.planet, 1).fillCircle(W / 2, H * 0.72 + r, r);
+    this.back.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 60, H * 0.72 + 60 + r, r);
     this.back.fillStyle(COLORS.cream, 1);
     for (const [x, y] of [[0.12, 0.13], [0.86, 0.1], [0.78, 0.5], [0.16, 0.56], [0.5, 0.07]]) this.back.fillCircle(W * x, H * y, 2);
-    this.title.setPosition(W / 2, H * 0.36);
-    this.tagline.setPosition(W / 2, H * 0.36 + 48);
-    this.prompt.setPosition(W / 2, H * 0.84);
+    this.title.setPosition(W / 2, H * 0.32);
+    this.tagline.setPosition(W / 2, H * 0.32 + 46);
+    this.prompt.setPosition(W / 2, H * 0.72 + 34);
   }
 }

@@ -7,13 +7,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Portals</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #123c42;
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #061c20;
     overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  #game { position: fixed; inset: 0; }
+  /* Sized, placed and (on an upright phone) turned by src/view.js, so the game is always wide. */
+  #game { position: fixed; left: 0; top: 0; transform-origin: 0 0; background: #123c42; }
   #game canvas { display: block; touch-action: none; }
   /* Invisible. The game reads its padding to learn how big the notch and home-bar areas are. */
   #probe { position: fixed; visibility: hidden;
-    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 </style>
 </head>
 <body>

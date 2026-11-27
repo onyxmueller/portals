@@ -23,7 +23,7 @@ export class StoryScene extends Phaser.Scene {
     this.story = text(this, 0, 0, lv.story.join('\n\n'), { size: 14, mono: true, align: 'left' }).setOrigin(0, 0).setLineSpacing(6);
     this.newLabel = text(this, 0, 0, 'NEW THIS LEG', { size: 11, mono: true, weight: '700', color: COLORS.warnCss, spacing: 1 }).setOrigin(0, 0);
     this.tip = text(this, 0, 0, lv.tip, { size: 13, mono: true, align: 'left' }).setOrigin(0, 0).setLineSpacing(5);
-    this.go = button(this, 'GO!', () => send({ t: 'go' }), { w: 240, h: 56, kind: 'primary' });
+    this.go = button(this, 'GO!', () => send({ t: 'go' }), { w: 170, h: 50, kind: 'primary' });
     this.dock = button(this, 'Back to dock', () => send({ t: 'end' }), { w: 150, h: 42, kind: 'outline' });
     this.waiting = text(this, 0, 0, '', { size: 13, mono: true, color: COLORS.dim });
     this.input.once('pointerdown', initAudio);
@@ -35,32 +35,36 @@ export class StoryScene extends Phaser.Scene {
     followResize(this);
   }
 
+  // Wide: the story on the left-hand page, what's new and the captain's buttons on the right.
   layout() {
-    const { W, H, safeTop, safeBottom } = view, captain = isCaptain();
-    const left = 28, right = W - 28, wide = right - left, g = this.paper;
+    const { W, H, safeTop, safeBottom } = view, captain = isCaptain(), g = this.paper;
+    const left = view.safeLeft + 30, right = W - view.safeRight - 30, mid = (left + right) / 2;
+    const lw = mid - 16 - left, rx = mid + 16, rw = right - rx;
 
-    // Squared paper, a page frame, and rules above and below the title.
+    // Squared paper, a page frame, and a rule under the title.
     g.clear().lineStyle(1, COLORS.button, 0.7);
     for (let x = GRID; x < W; x += GRID) g.lineBetween(x, 0, x, H);
     for (let y = GRID; y < H; y += GRID) g.lineBetween(0, y, W, y);
-    g.lineStyle(1.5, COLORS.line, 1).strokeRect(12, safeTop + 12, W - 24, H - safeTop - safeBottom - 24);
+    g.lineStyle(1.5, COLORS.line, 1).strokeRect(left - 18, safeTop + 12, right - left + 36, H - safeTop - safeBottom - 24);
 
-    let y = safeTop + 52;
-    this.manual.setPosition(left, y); this.leg.setPosition(right, y); y += 22;
-    this.name.setFontSize(38).setWordWrapWidth(wide).setPosition(left, y); y += this.name.height + 14;
-    g.lineBetween(left, y, right, y); y += 18;
-    this.story.setWordWrapWidth(wide).setPosition(left, y); y += this.story.height + 22;
+    let y = safeTop + 38;
+    this.manual.setPosition(left, y); this.leg.setPosition(right, y); y += 18;
+    this.name.setFontSize(32).setWordWrapWidth(lw).setPosition(left, y); y += this.name.height + 10;
+    g.lineBetween(left, y, mid - 16, y); y += 14;
+    this.story.setFontSize(13).setWordWrapWidth(lw).setPosition(left, y);
 
-    // What's new, in a dashed box.
-    this.tip.setWordWrapWidth(wide - 28);
-    const boxH = this.tip.height + 50;
-    for (let x = left; x < right; x += 9) { g.lineBetween(x, y, Math.min(x + 5, right), y); g.lineBetween(x, y + boxH, Math.min(x + 5, right), y + boxH); }
-    for (let yy = y; yy < y + boxH; yy += 9) { g.lineBetween(left, yy, left, Math.min(yy + 5, y + boxH)); g.lineBetween(right, yy, right, Math.min(yy + 5, y + boxH)); }
-    this.newLabel.setPosition(left + 14, y + 14);
-    this.tip.setPosition(left + 14, y + 34);
+    // What's new, in a dashed box at the top of the right-hand page.
+    const top = safeTop + 62;
+    this.tip.setWordWrapWidth(rw - 28);
+    const boxH = this.tip.height + 48;
+    for (let x = rx; x < right; x += 9) { g.lineBetween(x, top, Math.min(x + 5, right), top); g.lineBetween(x, top + boxH, Math.min(x + 5, right), top + boxH); }
+    for (let yy = top; yy < top + boxH; yy += 9) { g.lineBetween(rx, yy, rx, Math.min(yy + 5, top + boxH)); g.lineBetween(right, yy, right, Math.min(yy + 5, top + boxH)); }
+    this.newLabel.setPosition(rx + 14, top + 13);
+    this.tip.setPosition(rx + 14, top + 32);
 
-    this.go.setPosition(W / 2, H - safeBottom - 122).setVisible(captain);
-    this.dock.setPosition(W / 2, H - safeBottom - 58).setVisible(captain);
-    this.waiting.setPosition(W / 2, H - safeBottom - 96).setText(captain ? '' : `${captainName()} says when to go…`);
+    const by = H - safeBottom - 54;
+    this.dock.setPosition(rx + 75, by).setVisible(captain);
+    this.go.setPosition(right - 85, by).setVisible(captain);
+    this.waiting.setPosition(rx + rw / 2, by).setText(captain ? '' : `${captainName()} says when to go…`);
   }
 }

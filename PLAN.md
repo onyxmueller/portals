@@ -184,7 +184,9 @@ The mocks are on a design canvas: https://claude.ai/artifact/JDpet2au5uNEb1uU5Mv
 Built: the look is in the game on every screen, with our own drawn pictures in place of emoji
 and two bundled typefaces (Rubik, IBM Plex Mono). One change from the mocks: the planet along
 the bottom is the colour of your room, so crewmates can match a door on their screen to your
-phone. Still to do: sound effects and music, the Charger drawing on its briefing page, and a
+phone. After trying it on a phone, the game was turned to landscape (wide rooms suit a ship, and
+there is more space): upright phones draw it sideways, upright tablets letterbox it, and faults
+now appear at one of five spots across the room, not always the same two. Still to do: sound effects and music, the Charger drawing on its briefing page, and a
 check of how it all looks on real phones.
 
 - Start as a designer, not a builder: mock up a few different visual approaches (two or three

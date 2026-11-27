@@ -7,8 +7,12 @@ Live at https://portals.onyxmueller.net. Open it on two or more phones (iOS or A
 
 ## Play
 
-Each phone is a room on the ship (Engine, Bridge, Medbay...) with its own colour. The strips on
+Each phone is a room on the ship (Engine, Bridge, Medbay...) with its own colour. The doors on
 your screen edges show which room a part goes to if you fling it off that edge.
+
+The game is played wide. A phone held upright shows it sideways, so you turn the phone (this
+works even with rotation lock on). A tablet held upright shows a wide game across the middle;
+turning it fills the screen.
 
 **Getting a crew together.** One person taps **Start a crew** and gets a four-letter code. Others
 tap **Join a crew** and type it, or scan the QR code on the **Invite** panel with their phone's
@@ -27,8 +31,8 @@ The journey is three **legs**, flown in order. The captain presses **Launch** wh
 aboard, everyone reads a short briefing (the story so far, and what's new this leg), and the
 captain presses **Go!** Then:
 
-- **Faults** appear in your room with a ring that drains as time runs out, and the part they need
-  ("Fire, needs Extinguisher").
+- **Faults** appear in your room, each at one of five spots picked at random, with a ring that
+  drains as time runs out, and the part they need ("Fire, needs Extinguisher").
 - The part turns up in **someone else's room**, so shout for it. You can also **tap the fault**:
   your crewmates see what you need in a bubble on the door that points at you. They fling it to you; drop it on
   the fault to fix it. A good throw can land straight on the fault.
@@ -84,8 +88,8 @@ Testing shortcuts you can add to the address (join several with `&`):
 The same page is wrapped with Capacitor into real apps (`ios/` and `android/`). The Android app id is
 `net.onyxmueller.portals`; the iOS one is `com.softronyx.portals`, signed with the Softronyx team.
 The built page is bundled inside the app and talks to the live server at
-`wss://portals.onyxmueller.net`, so the apps work on any network. They are locked to portrait and
-use the phone's real haptics.
+`wss://portals.onyxmueller.net`, so the apps work on any network. They are locked to landscape (an iPad can be
+held either way) and use the phone's real haptics.
 
     npm run ios        # build the page, copy it into the iOS app and open Xcode
     npm run android    # build the page, copy it into the Android app and open Android Studio

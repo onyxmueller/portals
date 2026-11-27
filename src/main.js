@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DPR, view, measure } from './view.js';
+import { DPR, view, measure, pagePoint } from './view.js';
 import { COLORS } from './config/settings.js';
 import { connect } from './net.js';
 import { drawIcons, addIcons } from './ui/icons.js';
@@ -21,7 +21,7 @@ measure();
 
 // The canvas fills the whole screen at the phone's real pixel resolution, shown at 1/DPR
 // so it comes out the right size. Each scene's camera zooms by DPR (see view.js), so game
-// code works in screen points. The screen's real edges matter here: they are the portals.
+// code works in screen points. The game's edges matter here: they are the portals.
 const size = () => [Math.round(view.W * DPR), Math.round(view.H * DPR)];
 const [width, height] = size();
 
@@ -44,6 +44,15 @@ Promise.all([drawIcons(), ...fonts.map((f) => document.fonts.load(f).catch(() =>
     disableContextMenu: true,
     scene: [BootScene, TitleScene, HomeScene, JoinScene, LobbyScene, StoryScene, GameScene, ResultsScene],
   });
+  // When the game is drawn sideways (an upright phone), Phaser can't work out where a touch
+  // landed by itself, so we tell it.
+  const input = window.game.input, usual = input.transformPointer;
+  input.transformPointer = function (pointer, pageX, pageY, wasMove) {
+    if (!view.sideways) return usual.call(this, pointer, pageX, pageY, wasMove);
+    const p = pagePoint(pageX, pageY);
+    pointer.prevPosition.set(pointer.position.x, pointer.position.y);
+    pointer.position.set(p.x * DPR, p.y * DPR);
+  };
 });
 
 window.addEventListener('resize', () => {

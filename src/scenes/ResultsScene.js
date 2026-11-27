@@ -34,10 +34,10 @@ export class ResultsScene extends Phaser.Scene {
       { size: 12, mono: true, italic: !won, color: COLORS.dim, align: won ? 'left' : 'center' }).setLineSpacing(5);
     // Winning: on to the next leg (after the last one, the journey starts again). Losing: try this leg again.
     this.next = button(this, !won ? 'TRY AGAIN' : last ? 'FLY IT ALL AGAIN' : 'NEXT LEG',
-      () => send({ t: won ? 'launch' : 'go' }), { w: 260, h: 56, kind: 'primary' });
-    this.dock = button(this, 'Back to dock', () => send({ t: 'end' }), { w: 170, h: 44 });
+      () => send({ t: won ? 'launch' : 'go' }), { w: 240, h: 50, kind: 'primary' });
+    this.dock = button(this, 'Back to dock', () => send({ t: 'end' }), { w: 150, h: 44 });
     this.waiting = text(this, 0, 0, '', { size: 15, weight: '700', color: won ? COLORS.onPlanet : COLORS.dim });
-    this.leave = button(this, 'Leave crew', () => leaveCrew(), { w: 140, h: 40 });
+    this.leave = button(this, 'Leave crew', () => leaveCrew(), { w: 130, h: 40 });
 
     // Coral is only for the hull, so it's the losing flash; a win gets green.
     const flash = this.add.rectangle(0, 0, view.W, view.H, won ? COLORS.good : COLORS.bad, 0.4).setOrigin(0).setDepth(15);
@@ -52,35 +52,38 @@ export class ResultsScene extends Phaser.Scene {
     followResize(this);
   }
 
+  // Wide: the verdict stacked in the middle, the captain's buttons in a row underneath.
   layout() {
     const { W, H, safeTop, safeBottom } = view, captain = isCaptain(), won = this.won, b = this.back;
     b.clear();
     if (won) {
       // The planet they were flying to fills the bottom of the poster.
-      const top = H * 0.6, r = W * 1.05;
+      const top = H * 0.7, r = W * 1.4;
       b.fillStyle(COLORS.planet, 1).fillCircle(W / 2, top + r, r);
-      b.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 30, top + 110 + r * 0.8, r * 0.8);
+      b.fillStyle(0xd9772f, 1).fillCircle(W / 2 + 60, top + 60 + r, r);
     } else {
-      b.fillStyle(0x5a4a2a, 1).fillCircle(W * 0.92, H * 0.86, W * 0.36); // far off and dim
+      b.fillStyle(0x5a4a2a, 1).fillCircle(W * 0.9, H * 0.95, H * 0.5); // far off and dim
     }
     b.fillStyle(won ? COLORS.cream : COLORS.line, 1);
-    for (const [x, y] of [[0.12, 0.13], [0.86, 0.1], [0.78, 0.36], [0.16, 0.44], [0.5, 0.07]]) b.fillCircle(W * x, H * y, 2);
+    for (const [x, y] of [[0.08, 0.2], [0.9, 0.14], [0.8, 0.5], [0.14, 0.56], [0.3, 0.1]]) b.fillCircle(W * x, H * y, 2);
 
-    let y = safeTop + H * 0.13;
-    this.leg.setPosition(W / 2, y); y += 44;
-    this.title.setFontSize(50).setPosition(W / 2, y);
-    if (this.title.width > W - 32) this.title.setFontSize(Math.floor(50 * (W - 32) / this.title.width));
-    y += 54;
-    this.stars.forEach((s, i) => s.setPosition(W / 2 + (i - 1) * 58, y));
-    y += this.stars.length ? 46 : 0;
-    this.words.setWordWrapWidth(Math.min(W - 60, 420)).setOrigin(0.5, 0).setPosition(W / 2, y); y += this.words.height + 24;
-    if (won) this.manual.setOrigin(0, 0).setPosition(40, y);
-    else this.manual.setOrigin(0.5, 0).setPosition(W / 2, H * 0.6 - 30);
-    this.ship.setPosition(won ? W * 0.74 : W * 0.5, won ? H * 0.53 : H * 0.44);
+    let y = safeTop + Math.max(34, H * 0.1);
+    this.leg.setPosition(W / 2, y); y += 38;
+    this.title.setFontSize(46).setPosition(W / 2, y);
+    if (this.title.width > W - 32) this.title.setFontSize(Math.floor(46 * (W - 32) / this.title.width));
+    y += 44;
+    this.stars.forEach((s, i) => s.setDisplaySize(38, 38).setPosition(W / 2 + (i - 1) * 50, y));
+    y += this.stars.length ? 32 : -8;
+    this.words.setWordWrapWidth(Math.min(W - 120, 520)).setOrigin(0.5, 0).setPosition(W / 2, y); y += this.words.height + 10;
+    // The manual's stats sit to one side when won; its joke sits under the words when lost.
+    if (won) this.manual.setOrigin(0, 0.5).setPosition(view.safeLeft + 36, H * 0.42);
+    else this.manual.setOrigin(0.5, 0).setPosition(W / 2, y + 4);
+    this.ship.setPosition(W * 0.84, H * (won ? 0.4 : 0.34));
 
-    this.next.setPosition(W / 2, H * 0.72).setVisible(captain);
-    this.dock.setPosition(W / 2, H * 0.72 + 64).setVisible(captain);
-    this.waiting.setPosition(W / 2, H * 0.72 + 30).setText(captain ? '' : `Waiting for ${captainName()} to decide…`);
-    this.leave.setPosition(W / 2, H - safeBottom - 40);
+    const by = H - safeBottom - 46;
+    this.dock.setPosition(W / 2 - 150, by).setVisible(captain);
+    this.next.setPosition(W / 2 + 60, by).setVisible(captain);
+    this.waiting.setPosition(W / 2, by).setText(captain ? '' : `Waiting for ${captainName()} to decide…`);
+    this.leave.setPosition(W - view.safeRight - 84, by);
   }
 }

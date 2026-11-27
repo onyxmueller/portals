@@ -24,9 +24,9 @@ export class JoinScene extends Phaser.Scene {
     this.boxG = this.add.graphics();
     this.letters = Array.from({ length: CODE_LENGTH }, () => text(this, 0, 0, '', { size: 34, weight: '900' }));
     this.note = text(this, 0, 0, '', { size: 14, color: COLORS.warnCss });
-    this.keys = [...CODE_LETTERS].map((ch) => button(this, ch, () => this.type(ch), { w: 54, h: 50 }));
-    this.del = button(this, '⌫ Delete', () => this.type(null), { w: 130, h: 46 });
-    this.back = button(this, 'Back', () => this.scene.start('Home'), { w: 130, h: 46 });
+    this.keys = [...CODE_LETTERS].map((ch) => button(this, ch, () => this.type(ch), { w: 52, h: 46 }));
+    this.del = button(this, '⌫ Delete', () => this.type(null), { w: 130, h: 44 });
+    this.back = button(this, 'Back', () => this.scene.start('Home'), { w: 130, h: 44 });
 
     const onError = (why) => {
       this.busy = false; this.code = '';
@@ -52,11 +52,11 @@ export class JoinScene extends Phaser.Scene {
     this.paint();
   }
 
-  // Where the code boxes sit, shared by layout() and paint().
+  // Where the code boxes sit (on the left half), shared by layout() and paint().
   boxes() {
-    const { W, H, safeTop } = view, bw = 58, gap = 10;
-    const x0 = W / 2 - (CODE_LENGTH * bw + (CODE_LENGTH - 1) * gap) / 2;
-    return { bw, bh: 66, y: safeTop + H * 0.17, xs: Array.from({ length: CODE_LENGTH }, (_, i) => x0 + i * (bw + gap)) };
+    const { W, H, safeTop } = view, bw = 52, gap = 8;
+    const x0 = W * 0.3 - (CODE_LENGTH * bw + (CODE_LENGTH - 1) * gap) / 2;
+    return { bw, bh: 60, y: safeTop + H * 0.3, xs: Array.from({ length: CODE_LENGTH }, (_, i) => x0 + i * (bw + gap)) };
   }
 
   paint() {
@@ -70,16 +70,16 @@ export class JoinScene extends Phaser.Scene {
     });
   }
 
+  // Wide: the code on the left, the letter pad on the right.
   layout() {
-    const { W, H, safeBottom } = view, { bh, y } = this.boxes();
-    this.heading.setPosition(W / 2, y - 34);
-    this.note.setPosition(W / 2, y + bh + 26);
-    const step = Math.min(64, (W - 24) / COLS), rows = Math.ceil(this.keys.length / COLS);
-    const top = y + bh + 78, x0 = W / 2 - (step * (COLS - 1)) / 2;
-    this.keys.forEach((k, i) => k.setPosition(x0 + (i % COLS) * step, top + Math.floor(i / COLS) * 58));
-    const by = Math.min(top + rows * 58 + 14, H - safeBottom - 36);
-    this.back.setPosition(W / 2 - 72, by);
-    this.del.setPosition(W / 2 + 72, by);
+    const { W, H } = view, { bh, y } = this.boxes(), lx = W * 0.3;
+    this.heading.setPosition(lx, y - 30);
+    this.note.setPosition(lx, y + bh + 22);
+    this.back.setPosition(lx - 70, y + bh + 70);
+    this.del.setPosition(lx + 70, y + bh + 70);
+    const step = 58, rows = Math.ceil(this.keys.length / COLS), rowStep = Math.min(56, (H - 40) / rows);
+    const x0 = W * 0.7 - (step * (COLS - 1)) / 2, top = H / 2 - (rowStep * (rows - 1)) / 2;
+    this.keys.forEach((k, i) => k.setPosition(x0 + (i % COLS) * step, top + Math.floor(i / COLS) * rowStep));
     this.paint();
   }
 }
