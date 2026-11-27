@@ -27,7 +27,7 @@ crewmate in turn; fling it toward where they're actually sitting. From then on t
 door is on that part of your screen's edge, so you throw at the person. Each phone does this for
 itself, and remembers it. Skip it and the game uses the simpler mapping chosen in Settings.
 
-The journey is three **legs**, flown in order. The captain presses **Launch** when everyone is
+The journey is eight **legs**, flown in order. The captain presses **Launch** when everyone is
 aboard, everyone reads a short briefing (the story so far, and what's new this leg), and the
 captain presses **Go!** Then:
 
@@ -44,6 +44,15 @@ captain presses **Go!** Then:
 - Leg 3 has a **station**, the Charger, in one room (a ⚡ marks that room's door). Batteries turn
   up flat. Throw a flat one to the Charger's room; that crewmate leaves it on the Charger and
   spins a finger round it to crank it full, then throws it on to whoever needs it.
+- Leg 4, the fog bank: your room is **dark**. Hold a finger down to light up what's under it.
+- Leg 5 has the **Welder**: patches turn up cold. In the Welder's room, hold a finger on the
+  patch and let go while the ring is in the green.
+- Leg 6, goose trouble: **loose geese** hop about (and through doors). Drop each one on the
+  airlock before its ring runs out, or it pecks 5% off the hull.
+- Leg 7 has the **Pump**: coolant turns up as empty cans. In the Pump's room, tap the can fast
+  until it's full.
+- Leg 8, the wormhole: every so often the **doors move** to lead to different rooms, after a
+  warning. It also brings back the Charger and the asteroids.
 - Spare parts pile up. Leave one on the **airlock** to throw it away.
 
 Before launch the ship is docked and you can practise throwing. To fling: drag a part and let go.

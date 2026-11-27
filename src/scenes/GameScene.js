@@ -4,7 +4,7 @@
 import Phaser from 'phaser';
 import { view, setupCamera } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
-import { PARTS } from '../config/parts.js';
+import { PARTS, GOOSE } from '../config/parts.js';
 import { STATIONS } from '../config/stations.js';
 import { net, state, send } from '../net.js';
 import { Deck } from '../deck/Deck.js';
@@ -21,6 +21,8 @@ const RING = 14;           // how thick a fault's timer ring is
 const STATION_R = 46;      // size of a station's pad
 const STATION_REACH = 150; // how far from a station a finger can be and still be working it
 const URGENT = 5000;       // a fault with less than this long left (ms) turns coral: the hull is about to pay
+const FOG = 8;             // depth of the fog; anything that should show through it is drawn above
+const LIGHT = 120;         // how far a finger lights up the fog around it
 const TAU = Math.PI * 2;
 
 export class GameScene extends Phaser.Scene {
@@ -34,6 +36,11 @@ export class GameScene extends Phaser.Scene {
     this.deck.onTap = (x, y, pointer) => { if (!this.startWork(x, y, pointer)) this.callOut(x, y); };
     this.faults = []; // faults in my room: { id, kind, ttl, deadline, spot (which of SPOTS), done }
 
+    this.foggy = state.game.level && state.game.level.twist === 'fog';
+    const over = this.foggy ? FOG + 1 : 1; // in fog, alarms and words still show
+    this.geese = new Map(); // goose id -> { deadline, ttl }, as the ship last told us
+    this.geeseG = this.add.graphics().setDepth(6);
+
     this.airlockG = this.add.graphics().setDepth(1);
     this.airlockLabel = text(this, 0, 0, 'airlock', { size: 13, color: COLORS.dim }).setOrigin(0, 0.5).setDepth(1);
 
@@ -45,14 +52,14 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < SLOTS; i++) {
       this.slots.push({
         ghost: icon(this, 0, 0, 'star', R * 1.2, COLORS.cream).setAlpha(0.4).setDepth(1),
-        title: text(this, 0, 0, '', { size: 26, weight: '900', spacing: 1 }).setDepth(1),
-        needs: text(this, 0, 0, '', { size: 13 }).setDepth(1),
+        title: text(this, 0, 0, '', { size: 26, weight: '900', spacing: 1 }).setDepth(over),
+        needs: text(this, 0, 0, '', { size: 13 }).setDepth(over),
         kind: -1,
       });
     }
 
     // A station in my room, if this leg has one and it's mine.
-    this.work = null; // the part sitting on my station: { it, done (radians turned so far), finger: { id, a } | null }
+    this.work = null; // the part sitting on my station: { it, done (0 to 1), finger: { id, a } | null, note }
     this.stationIcon = icon(this, 0, 0, 'bolt', STATION_R * 0.8, COLORS.cream).setAlpha(0.3).setDepth(1);
     this.stationName = text(this, 0, 0, '', { size: 18, weight: '700', color: COLORS.warnCss }).setDepth(1);
     this.stationHint = text(this, 0, 0, '', { size: 13 }).setDepth(1);
@@ -70,9 +77,24 @@ export class GameScene extends Phaser.Scene {
     this.frameG = this.add.graphics().setDepth(15).setAlpha(0); // the coral frame that means "hull lost"
     this.buttons = [button(this, 'Settings', () => openSettings(this))];
 
+    // Fog: a dark sheet over the room with holes of light cut in it every frame (see update).
+    if (this.foggy) {
+      if (!this.textures.exists('light')) {
+        const c = this.textures.createCanvas('light', 256, 256), ctx = c.getContext();
+        const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+        grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.7, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, 256, 256);
+        c.refresh();
+      }
+      this.lightStamp = this.make.image({ key: 'light', add: false });
+    }
+    this.fog = null;
+
     net.on('game', this.onGame, this);
     this.events.once('shutdown', () => net.off('game', this.onGame, this));
     this.syncFaults(state.game);
+    this.syncGeese(state.game);
+    this.shiftSeen = state.game.shift || 0;
 
     followPhase(this, 'run');
     followResize(this);
@@ -106,6 +128,10 @@ export class GameScene extends Phaser.Scene {
     this.layoutStation();
     this.deck.refresh();
     this.drawHull();
+    if (this.foggy) {
+      if (this.fog) this.fog.destroy();
+      this.fog = this.add.renderTexture(0, 0, Math.ceil(W), Math.ceil(Deck.rise() + 4)).setOrigin(0).setDepth(FOG);
+    }
   }
 
   // ---------- the ship's state ----------
@@ -121,9 +147,30 @@ export class GameScene extends Phaser.Scene {
       sfx.damage(); buzz('MEDIUM');
       for (const f of gone) this.tooLate(f); // it was one of mine
     }
+    if (m.ev === 'peck') {
+      // A goose nobody threw out has pecked the hull. Same coral frame: the hull paid.
+      this.hit = { from: this.seenHull, until: performance.now() + 1400 };
+      this.frameG.setAlpha(1);
+      this.tweens.add({ targets: this.frameG, alpha: 0, delay: 250, duration: 700 });
+      this.banner('HONK!', 'A goose pecked the hull');
+      sfx.damage(); buzz('MEDIUM');
+    }
     this.seenHull = m.hull;
+    this.syncGeese(m);
     if (m.ev === 'fault' && m.who === state.me) { sfx.fault(); buzz('LIGHT'); }
     if (m.ev === 'burst') this.asteroids();
+    if (m.ev === 'goose' && m.who === state.me) { this.banner('GOOSE LOOSE!', 'Drop it on the airlock'); sfx.fault(); buzz('LIGHT'); }
+    if (m.ev === 'warn') { this.banner('WORMHOLE!', 'The doors are about to move'); sfx.strike(); buzz('LIGHT'); }
+    // The doors moved: redraw them, and ring each one so eyes go to where they are now.
+    if ((m.shift || 0) !== this.shiftSeen) {
+      this.shiftSeen = m.shift || 0;
+      this.deck.refresh();
+      for (const [id, d] of this.deck.doors) {
+        const p = state.players.find((x) => x.id === id);
+        this.deck.pulse(d.cx, d.cy, p ? Phaser.Display.Color.HexStringToColor(p.color).color : COLORS.cream);
+      }
+      if (m.ev === 'swap') { sfx.strike(); buzz('MEDIUM'); }
+    }
     // A station moves if its crewmate drops out: redraw the doors and my own pad.
     const where = JSON.stringify(m.stations || []);
     if (where !== this.stationsSeen) { this.deck.refresh(); this.layoutStation(); }
@@ -145,6 +192,16 @@ export class GameScene extends Phaser.Scene {
       f.spot = free[Math.floor(Math.random() * free.length)] ?? 0;
     }
     return old.filter((o) => !o.done && !this.faults.some((f) => f.id === o.id));
+  }
+
+  // Remember how long each loose goose has left, and lose any goose in my room that the ship
+  // no longer counts (it pecked the hull and slipped away, or the leg is over).
+  syncGeese(m) {
+    const now = performance.now();
+    this.geese = new Map((m.geese || []).map((x) => [x.id, { deadline: now + x.left, ttl: x.ttl }]));
+    for (const it of [...this.deck.items]) {
+      if (it.kind === GOOSE && it.state !== 'leaving' && !this.geese.has(it.id)) { this.deck.flash(it.x, it.y, COLORS.cream); this.deck.remove(it); }
+    }
   }
 
   // Tapping one of my faults calls out for the part: crewmates see what I need in a bubble
@@ -171,10 +228,11 @@ export class GameScene extends Phaser.Scene {
   // ---------- moments ----------
   // Something that pops up over a fault's slot for a moment: a drawing, a word and maybe a line under it.
   moment(p, draw, word, color, line) {
-    const g = this.add.graphics().setDepth(6);
+    const d = this.foggy ? FOG + 1 : 6;
+    const g = this.add.graphics().setDepth(d);
     draw(g);
-    const bits = [g, this.fit(text(this, p.x, p.y - 70, word, { size: 26, weight: '900', color, spacing: 1 }).setDepth(6))];
-    if (line) bits.push(text(this, p.x, p.y + 66, line, { size: 13 }).setDepth(6));
+    const bits = [g, this.fit(text(this, p.x, p.y - 70, word, { size: 26, weight: '900', color, spacing: 1 }).setDepth(d))];
+    if (line) bits.push(text(this, p.x, p.y + 66, line, { size: 13 }).setDepth(d));
     this.tweens.add({ targets: bits, alpha: 0, delay: 900, duration: 350, onComplete: () => bits.forEach((b) => b.destroy()) });
   }
 
@@ -218,18 +276,23 @@ export class GameScene extends Phaser.Scene {
       rock.setPosition(-60 - i * 50, y0 - 60);
       this.tweens.add({ targets: rock, x: W + 120, y: y0 + (W + 180) * 0.5, delay: i * 90, duration: 650, onComplete: () => rock.destroy() });
     }
-    const bw = Math.min(W - 70, 310);
+    this.banner('ASTEROIDS!', 'Patch every room');
+    sfx.strike(); buzz('MEDIUM');
+  }
+
+  // A cream banner slapped across the middle of the room for a couple of seconds: something
+  // just happened to the whole ship, and here's what to do about it.
+  banner(title, line) {
+    const { W, H } = view;
+    const big = text(this, 0, -12, title, { size: 34, weight: '900', color: COLORS.inkCss, spacing: 1 });
+    const small = text(this, 0, 20, line, { size: 15, weight: '700', color: COLORS.inkCss });
+    const bw = Math.min(W - 70, Math.max(310, big.width + 50, small.width + 50));
     const g = this.add.graphics();
     g.fillStyle(COLORS.shadow, 1).fillRect(-bw / 2 + 6, -36, bw, 84);
     g.fillStyle(COLORS.cream, 1).fillRect(-bw / 2, -42, bw, 84);
-    const banner = this.add.container(W / 2, cy, [
-      g,
-      text(this, 0, -12, 'ASTEROIDS!', { size: 34, weight: '900', color: COLORS.inkCss, spacing: 1 }),
-      text(this, 0, 20, 'Patch every room', { size: 15, weight: '700', color: COLORS.inkCss }),
-    ]).setDepth(12).setRotation(-0.05).setScale(0.5);
+    const banner = this.add.container(W / 2, H * 0.52, [g, big, small]).setDepth(12).setRotation(-0.05).setScale(0.5);
     this.tweens.add({ targets: banner, scale: 1, duration: 200, ease: 'Back.Out' });
     this.tweens.add({ targets: banner, alpha: 0, delay: 1900, duration: 400, onComplete: () => banner.destroy() });
-    sfx.strike(); buzz('MEDIUM');
   }
 
   // ---------- my station ----------
@@ -247,18 +310,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   // A finger went down on empty deck. If there's a part on my station and the finger is near
-  // it, that finger starts working the station.
+  // it, that finger works the station. What that means depends on the station (its `how`).
   startWork(x, y, pointer) {
-    const p = this.stationPos();
-    if (!this.work || this.work.finger || Math.hypot(x - p.x, y - p.y) > STATION_REACH) return false;
-    this.work.finger = { id: pointer.id, a: Math.atan2(y - p.y, x - p.x) };
+    const p = this.stationPos(), w = this.work, mine = this.myStation();
+    if (!w || !mine || Math.hypot(x - p.x, y - p.y) > STATION_REACH) return false;
+    if (mine.how === 'taps') {
+      // The Pump: every tap adds a little, and it drains between taps (see update).
+      w.done += 1 / mine.taps;
+      sfx.send(); buzz('LIGHT');
+      if (w.done >= 1) this.finishWork();
+      return true;
+    }
+    if (w.finger) return false;
+    w.finger = { id: pointer.id, a: Math.atan2(y - p.y, x - p.x) };
+    w.note = null;
     return true;
   }
 
   // The Charger: going round and round the pad cranks it. Either direction counts.
   onWorkMove(pointer) {
     const w = this.work, mine = this.myStation();
-    if (!w || !mine || !w.finger || w.finger.id !== pointer.id) return;
+    if (!w || !mine || mine.how !== 'spin' || !w.finger || w.finger.id !== pointer.id) return;
     const p = this.stationPos(), dx = pointer.worldX - p.x, dy = pointer.worldY - p.y;
     if (Math.hypot(dx, dy) < 14) return; // too close to the middle to tell which way it's going
     const a = Math.atan2(dy, dx);
@@ -266,20 +338,47 @@ export class GameScene extends Phaser.Scene {
     if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU;
     w.finger.a = a;
     const before = w.done;
-    w.done += Math.abs(d);
-    if (Math.floor(w.done / (TAU / 4)) > Math.floor(before / (TAU / 4))) { sfx.send(); buzz('LIGHT'); } // a click every quarter turn
-    if (w.done < mine.turns * TAU) return;
-    // Done: it's a new part now, and it pops off the pad.
+    w.done += Math.abs(d) / (mine.turns * TAU);
+    if (Math.floor(w.done * mine.turns * 4) > Math.floor(before * mine.turns * 4)) { sfx.send(); buzz('LIGHT'); } // a click every quarter turn
+    if (w.done >= 1) this.finishWork();
+  }
+
+  // The Welder: the ring heats while the finger is down. Let go in the green and it's welded;
+  // let go early and nothing happens.
+  onWorkUp(pointer) {
+    const w = this.work, mine = this.myStation();
+    if (!w || !w.finger || w.finger.id !== pointer.id) return;
+    w.finger = null;
+    if (!mine || mine.how !== 'hold') return;
+    if (w.done >= mine.green[0] && w.done <= mine.green[1]) { this.finishWork(); return; }
+    w.done = 0; w.note = 'Too soon. Hold it longer';
+  }
+
+  // The station has finished: the part on it is a new part now, and it pops off the pad.
+  finishWork() {
+    const w = this.work, mine = this.myStation(), p = this.stationPos();
     this.deck.setKind(w.it, mine.gives);
     w.it.docked = false;
-    w.it.vx = (Math.random() - 0.5) * 200; w.it.vy = 320;
+    w.it.vx = (Math.random() - 0.5) * 200; w.it.vy = -320; // up into the room, away from the planet
     this.deck.flash(p.x, p.y, COLORS.good);
     sfx.fix(); buzz('MEDIUM');
     this.work = null;
   }
 
-  onWorkUp(pointer) {
-    if (this.work && this.work.finger && this.work.finger.id === pointer.id) this.work.finger = null;
+  // Stations that change with time: the Welder heats while held, the Pump drains between taps.
+  stepWork(dt) {
+    const w = this.work, mine = this.myStation();
+    if (!w || !mine) return;
+    if (mine.how === 'hold' && w.finger) {
+      w.done += dt / mine.heat;
+      if (w.done >= 1) { // held too long: it has to cool, and you start again
+        w.done = 0; w.finger = null; w.note = 'Too hot! Let go in the green';
+        this.cameras.main.shake(120, 0.003);
+        sfx.airlock(); buzz('MEDIUM');
+      }
+    } else if (mine.how === 'taps') {
+      w.done = Math.max(0, w.done - mine.drain * dt / 1000);
+    }
   }
 
   // A part touching a fault it matches fixes it. A part left on the airlock is thrown away.
@@ -309,9 +408,58 @@ export class GameScene extends Phaser.Scene {
       }
       if (!used && slow && Math.hypot(it.x - air.x, it.y - air.y) < AR) {
         used = true; sfx.airlock();
+        if (it.kind === GOOSE) { // out it goes (it has a little helmet)
+          send({ t: 'out', id: it.id });
+          this.deck.flash(air.x, air.y, COLORS.good);
+          buzz('MEDIUM');
+        }
       }
       if (used) this.deck.remove(it);
     }
+  }
+
+  // ---------- geese ----------
+  // A loose goose hops about by itself (and out through a door, if it happens to hop that
+  // way), and wears a ring that drains: when it's empty, the goose pecks the hull.
+  stepGeese(now) {
+    const g = this.geeseG;
+    g.clear();
+    for (const it of this.deck.items) {
+      if (it.kind !== GOOSE) continue;
+      it.hopAt ??= now + 700 + Math.random() * 800;
+      if (now >= it.hopAt && !it.held && it.state === 'in') {
+        const a = Math.random() * TAU, sp = 380 + Math.random() * 220;
+        it.vx = Math.cos(a) * sp; it.vy = Math.sin(a) * sp;
+        it.hopAt = now + 900 + Math.random() * 1500;
+      }
+      const t = this.geese.get(it.id);
+      if (!t || it.state === 'leaving') continue;
+      const left = Math.max(0, t.deadline - now);
+      g.lineStyle(7, left < URGENT ? COLORS.bad : COLORS.warn, 1).beginPath();
+      g.arc(it.x, it.y, R + 9, -Math.PI / 2, -Math.PI / 2 + TAU * (left / t.ttl));
+      g.strokePath();
+    }
+  }
+
+  // ---------- fog ----------
+  // Dark everywhere except: under each finger that's down, at my faults (alarms glow), and at
+  // the doors, the airlock and my station (you know your own room). Parts are what get lost.
+  drawFog() {
+    const rt = this.fog, stamp = this.lightStamp;
+    if (!rt) return;
+    rt.clear();
+    rt.fill(COLORS.shadow, 0.96);
+    const light = (x, y, r) => { stamp.setScale((r * 2) / 256); rt.erase(stamp, x, y); };
+    for (const p of this.input.manager.pointers) {
+      if (!p || !p.isDown) continue;
+      const at = this.cameras.main.getWorldPoint(p.x, p.y); // p.worldX is only right while a touch is being handled
+      light(at.x, at.y, LIGHT);
+    }
+    for (const f of this.faults) if (!f.done) { const p = this.spotPos(f.spot); light(p.x, p.y, SR + 26); }
+    for (const d of this.deck.doorSpots) light(d.cx, d.cy, 62);
+    const air = this.airlockPos();
+    light(air.x, air.y, AR + 22);
+    if (this.myStation()) { const p = this.stationPos(); light(p.x, p.y, STATION_R + 30); }
   }
 
   // ---------- drawing ----------
@@ -330,6 +478,8 @@ export class GameScene extends Phaser.Scene {
   update() {
     const now = performance.now(), g = this.ringG;
     if (this.hit) this.drawHull(); // so the lost piece clears when its moment is over
+    this.stepWork(this.game.loop.delta);
+    this.stepGeese(now);
     g.clear();
     for (const s of this.slots) { s.ghost.setVisible(false); s.title.setVisible(false); s.needs.setVisible(false); }
 
@@ -339,14 +489,25 @@ export class GameScene extends Phaser.Scene {
       const p = this.stationPos(), w = this.work;
       g.fillStyle(COLORS.panel, 1).fillCircle(p.x, p.y, STATION_R + 8);
       if (w) {
-        g.lineStyle(16, COLORS.good, 1).beginPath();
-        g.arc(p.x, p.y, STATION_R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, w.done / (mine.turns * TAU)));
-        g.strokePath();
+        const top = -Math.PI / 2, k = Math.min(1, w.done);
+        let color = COLORS.good;
+        if (mine.how === 'hold') {
+          // Where to let go, marked on the ring; the heat creeps round towards and past it.
+          g.lineStyle(16, COLORS.good, 0.35).beginPath();
+          g.arc(p.x, p.y, STATION_R, top + TAU * mine.green[0], top + TAU * mine.green[1]);
+          g.strokePath();
+          color = k >= mine.green[0] && k <= mine.green[1] ? COLORS.good : COLORS.cream;
+        }
+        if (k > 0.004) {
+          g.lineStyle(mine.how === 'hold' ? 8 : 16, color, 1).beginPath();
+          g.arc(p.x, p.y, STATION_R, top, top + TAU * k);
+          g.strokePath();
+        }
       } else {
         g.lineStyle(3, COLORS.warn, 0.8).strokeCircle(p.x, p.y, STATION_R);
       }
       this.stationIcon.setVisible(!w);
-      this.stationHint.setText(w ? mine.busy : mine.empty);
+      this.stationHint.setText(w ? w.note || mine.busy : mine.empty);
     }
 
     let shown = 0;
@@ -372,5 +533,6 @@ export class GameScene extends Phaser.Scene {
       s.title.setColor(urgent ? COLORS.badCss : COLORS.warnCss).setPosition(p.x, p.y - 70).setVisible(true);
       s.needs.setPosition(p.x, p.y + 66).setVisible(true);
     }
+    if (this.foggy) this.drawFog();
   }
 }

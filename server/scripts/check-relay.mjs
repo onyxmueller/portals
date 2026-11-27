@@ -168,6 +168,35 @@ try {
   a.say({ t: 'end' });
   await wait(200);
 
+  // ---- later legs: fog, geese, moving doors ----
+  const fly = async (n) => { a.say({ t: 'level', n }); a.say({ t: 'launch' }); a.say({ t: 'go' }); await wait(300); return b2.last('game'); };
+  const fog = await fly(3);
+  check('the fog leg tells the phones to go dark', fog.phase === 'run' && fog.level.twist === 'fog');
+  a.say({ t: 'end' }); await wait(200);
+
+  const welding = await fly(4);
+  check('the welder leg puts a welder in someone\'s room', welding.stations[0]?.type === 'welder');
+  a.say({ t: 'end' }); await wait(200);
+
+  const mark = [a.log.length, b2.log.length];
+  await fly(5);
+  let goose;
+  for (let i = 0; i < 40 && !(goose = [...a.log.slice(mark[0]), ...b2.log.slice(mark[1])].find((m) => m.t === 'spawn' && m.item.kind === 19)); i++) await wait(250);
+  await wait(200);
+  check('a goose gets loose in someone\'s room, with a timer', !!goose && a.last('game').geese.some((x) => x.id === goose.item.id && x.left > 0));
+  if (goose) {
+    a.say({ t: 'out', id: goose.item.id });
+    await wait(200);
+    check('throwing it out of the airlock ends its timer', !b2.last('game').geese.some((x) => x.id === goose.item.id) && b2.last('game').hull === 100);
+  }
+  a.say({ t: 'end' }); await wait(200);
+
+  await fly(7);
+  for (let i = 0; i < 80 && !a.last('game').shift; i++) await wait(250);
+  check('in the wormhole the doors are told to move, after a warning',
+    a.last('game').shift === 1 && a.log.some((m) => m.t === 'game' && m.ev === 'warn') && a.log.some((m) => m.t === 'game' && m.ev === 'swap'));
+  a.say({ t: 'end' }); await wait(200);
+
   // ---- the captain leaves ----
   a.say({ t: 'leave' });
   await wait(200);

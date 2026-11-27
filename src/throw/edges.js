@@ -51,7 +51,24 @@ function stripPosOfAngle(a) {
 
 // ---------- the portals ----------
 // Every portal on my screen: { p, t0, t1, door }.
-export function portals() {
+export const portals = () => warped(plain());
+
+// In a wormhole the doors move: each time the ship says so (state.game.shift goes up), the
+// rooms swap doors with each other. With only one crewmate there's nobody to swap with, so
+// instead just one edge at a time leads to them.
+function warped(list) {
+  const n = state.game.phase === 'run' ? state.game.shift || 0 : 0;
+  if (!n || !list.length) return list;
+  if (new Set(list.map((s) => s.p.id)).size > 1) {
+    const k = n % list.length;
+    return list.map((s, i) => ({ ...s, p: list[(i + k) % list.length].p }));
+  }
+  const { W, H } = view;
+  const [t0, t1] = [[0, H], [H, H + W], [H + W, stripLength()]][n % 3];
+  return [{ p: list[0].p, t0, t1, door: (t0 + t1) / 2 }];
+}
+
+function plain() {
   const o = others(), { W, H } = view, L = stripLength();
   if (!o.length) return [];
   const pointed = angles();

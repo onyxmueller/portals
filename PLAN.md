@@ -139,7 +139,7 @@ names, and the request ping (tap your fault). Pointing was tried with real peopl
 The compass experiment was built, tried on a real phone and shelved: it wasn't clear enough to
 be worth keeping. Where you pointed is stored as a direction, so it could be picked up again.
 
-### Phase 4: Levels and story (first 3 legs built)
+### Phase 4: Levels and story (8 legs built; the last 5 not yet played on phones)
 
 Start with 3 levels, then grow the campaign.
 
@@ -168,8 +168,14 @@ Built: three legs with a briefing before each and stars after (Leaving port: fet
 Asteroid belt: hull breaches in every room at once; The long dark: the Charger station, where
 flat batteries are cranked full with a spinning finger). Legs live in `server/levels.js`, and
 the goal grows with the crew. Played on real phones: it works, though it may be too easy, so
-the numbers want tuning with a fuller crew. Still to do later: more legs, more twists (stowaways,
-nebula, wormhole) and more stations (welder, pump...).
+the numbers want tuning with a fuller crew.
+
+Then grown to 16 parts and faults (from 8) and eight legs. The five new legs are a second job
+(geese, the other way): Fog bank (dark except near a finger), The patch-up (the Welder: hold and
+let go in the green), Goose trouble (loose geese to airlock before they peck the hull), Dry run
+(the Pump: tap fast) and Wormhole (the doors move; with only two phones, one edge at a time
+leads to the other). Checked on the server and in a browser, not yet played on real phones.
+Ideas not built: fabricator, crates, two-room jobs, work on the fault itself.
 
 ### Phase 5: Art, music and sound (look built; sound and music to do)
 

@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { LEVELS, STATIONS, GOAL_PER_EXTRA, STARS } = require('./levels');
+const { LEVELS, STATIONS, GOAL_PER_EXTRA, STARS, GOOSE } = require('./levels');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0'; // the live server sets 127.0.0.1 and sits behind Apache
@@ -79,19 +79,22 @@ const HULL_DAMAGE = 15;      // hull lost when a fault runs out (hull starts at 
 const DECOY_CHANCE = 0.25;   // chance a new fault also drops a useless spare part somewhere
 const TEST_GOAL = Number(process.env.TEST_GOAL) || 0; // the check script shortens every leg with this
 
-const newGame = (phase = 'lobby') => ({ phase, hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], nextFaultAt: 0, nextBurstAt: 0, seq: 1 });
+const newGame = (phase = 'lobby') => ({ phase, hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], geese: [], shift: 0, nextFaultAt: 0, nextBurstAt: 0, nextSwapAt: 0, nextGooseAt: 0, seq: 1 });
 // The leg the ship is on. A finished leg stays on screen while crew.level already points at the next one.
 const legOf = (crew) => crew.game.level ?? crew.level;
 const levelOf = (crew) => LEVELS[legOf(crew)];
 
 // The whole ship state. `ev` says what just happened (brief, launch, fault, burst, fixed, lost,
-// won, over, end) and `who` is the room it happened in.
+// won, over, end, warn = the doors are about to move, swap = they moved, goose = one got loose,
+// peck = one pecked the hull) and `who` is the room it happened in.
 function gameMsg(crew, ev, who) {
   const g = crew.game, now = Date.now(), lv = levelOf(crew);
   return {
     t: 'game', phase: g.phase, hull: g.hull, score: g.score, goal: g.goal, stars: g.stars, ev, who,
-    level: { n: legOf(crew), of: LEVELS.length, name: lv.name, story: lv.story, tip: lv.tip, won: lv.won, station: lv.station || null },
+    level: { n: legOf(crew), of: LEVELS.length, name: lv.name, story: lv.story, tip: lv.tip, won: lv.won, station: lv.station || null, twist: lv.twist || null },
     stations: g.stations,
+    shift: g.shift, // how many times the doors have moved this leg
+    geese: g.geese.map((x) => ({ id: x.id, ttl: x.ttl, left: Math.max(0, x.deadline - now) })),
     faults: g.faults.map((f) => ({ id: f.id, owner: f.owner, kind: f.kind, ttl: f.ttl, left: Math.max(0, f.deadline - now) })),
   };
 }
@@ -107,6 +110,8 @@ function startLeg(crew) {
   g.goal = TEST_GOAL || lv.goal + Math.max(0, aboard(crew).length - 2) * GOAL_PER_EXTRA;
   g.nextFaultAt = now + 1000;
   g.nextBurstAt = lv.burst ? now + lv.burst.first : 0;
+  g.nextSwapAt = lv.swap ? now + lv.swap.first : 0;
+  g.nextGooseAt = lv.geese ? now + lv.geese.first : 0;
   placeStations(crew);
   broadcastGame(crew, 'launch');
 }
@@ -171,17 +176,47 @@ function addBurst(crew) {
   broadcastGame(crew, 'burst');
 }
 
+// The doors move: first a warning, then every phone shuffles which room each door leads to.
+function swapDoors(crew, now) {
+  const g = crew.game, lv = levelOf(crew);
+  if (!g.warned) { g.warned = true; g.nextSwapAt = now + lv.swap.warn; broadcastGame(crew, 'warn'); return; }
+  g.warned = false; g.shift++;
+  g.nextSwapAt = now + lv.swap.every - lv.swap.warn;
+  broadcastGame(crew, 'swap');
+}
+
+// A goose gets loose in someone's room. Bigger crews can have more of them wandering at once.
+function addGoose(crew, now) {
+  const g = crew.game, lv = levelOf(crew), here = aboard(crew);
+  g.nextGooseAt = now + lv.geese.every;
+  if (!here.length || g.geese.length >= lv.geese.max + Math.floor(Math.max(0, here.length - 2) / 2)) return;
+  const id = `s${g.seq++}`, owner = pick(here);
+  g.geese.push({ id, ttl: lv.geese.time, deadline: now + lv.geese.time });
+  send(owner.ws, { t: 'spawn', item: { id, kind: GOOSE } });
+  broadcastGame(crew, 'goose', owner.id);
+}
+
 function tick(crew) {
-  const g = crew.game, now = Date.now();
+  const g = crew.game, now = Date.now(), lv = levelOf(crew);
   if (g.phase !== 'run') return;
+  // A goose nobody threw out pecks the hull once, then slips away into the vents.
+  const pecked = g.geese.filter((x) => x.deadline <= now);
+  if (pecked.length) {
+    g.geese = g.geese.filter((x) => x.deadline > now);
+    g.hull = Math.max(0, g.hull - lv.geese.peck * pecked.length);
+    if (g.hull <= 0) { g.phase = 'over'; g.faults = []; g.geese = []; broadcastGame(crew, 'over'); return; }
+    broadcastGame(crew, 'peck');
+  }
   const expired = g.faults.filter((f) => f.deadline <= now);
   if (expired.length) {
     g.faults = g.faults.filter((f) => f.deadline > now);
     g.hull = Math.max(0, g.hull - HULL_DAMAGE * expired.length);
-    if (g.hull <= 0) { g.phase = 'over'; g.faults = []; broadcastGame(crew, 'over'); return; }
+    if (g.hull <= 0) { g.phase = 'over'; g.faults = []; g.geese = []; broadcastGame(crew, 'over'); return; }
     broadcastGame(crew, 'lost', expired[0].owner);
   }
   if (g.nextBurstAt && now >= g.nextBurstAt) addBurst(crew);
+  if (g.nextSwapAt && now >= g.nextSwapAt) swapDoors(crew, now);
+  if (g.nextGooseAt && now >= g.nextGooseAt) addGoose(crew, now);
   if (now >= g.nextFaultAt) addFault(crew);
 }
 setInterval(() => { for (const crew of crews.values()) tick(crew); }, 250);
@@ -371,6 +406,12 @@ wss.on('connection', (ws, req) => {
       if (!fault || now - (player.lastAsk || 0) < ASK_GAP) return;
       player.lastAsk = now;
       for (const p of crew.players) if (p !== player) send(p.ws, { t: 'ask', from: player.id, kind: fault.kind });
+    } else if (m.t === 'out') {
+      // A goose went out of the airlock.
+      const g = crew.game;
+      if (!g.geese.some((x) => x.id === m.id)) return;
+      g.geese = g.geese.filter((x) => x.id !== m.id);
+      broadcastGame(crew);
     } else if (m.t === 'fix') {
       const g = crew.game;
       const fault = g.faults.find((f) => f.id === m.id && f.owner === player.id);
@@ -379,7 +420,7 @@ wss.on('connection', (ws, req) => {
       g.score++;
       if (g.score < g.goal) { broadcastGame(crew, 'fixed', player.id); return; }
       // Leg finished. Stars are for how much hull is left; the next launch flies the next leg.
-      g.phase = 'won'; g.faults = []; g.level = crew.level;
+      g.phase = 'won'; g.faults = []; g.geese = []; g.level = crew.level;
       g.stars = g.hull >= STARS.three ? 3 : g.hull >= STARS.two ? 2 : 1;
       broadcastGame(crew, 'won', player.id);
       crew.level = (crew.level + 1) % LEVELS.length;

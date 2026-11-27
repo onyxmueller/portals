@@ -6,7 +6,7 @@
 // heart of the game, and it isn't something a stock physics engine is built for.
 import { view } from '../view.js';
 import { SETTINGS, COLORS } from '../config/settings.js';
-import { PARTS } from '../config/parts.js';
+import { PARTS, FIXERS } from '../config/parts.js';
 import { STATIONS } from '../config/stations.js';
 import { net, state, send, connected, mySelf, others } from '../net.js';
 import { portals, portalAt, portalFrom, stripPos, stripPoint, edgeOf } from '../throw/edges.js';
@@ -39,6 +39,7 @@ export class Deck {
     this.backG = scene.add.graphics().setDepth(0); // the backdrop: an orbit line, and a planet along the bottom
     this.portalG = scene.add.graphics().setDepth(2);
     this.portalBits = [];   // the icons and names drawn on the portals
+    this.doorSpots = [];
     this.doors = new Map(); // player id -> where their door is, for speech bubbles: { x, y, nx, ny }
     this.status = text(scene, 0, 0, '', { size: 13, weight: '700', color: COLORS.onPlanet, align: 'left' }).setOrigin(0, 0.5).setDepth(10);
 
@@ -105,7 +106,7 @@ export class Deck {
     const { W, H } = view;
     return this.add({
       id: `${state.me}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
-      kind: Math.floor(Math.random() * PARTS.filter((p) => p.fault).length),
+      kind: FIXERS[Math.floor(Math.random() * FIXERS.length)],
       x: W * (0.3 + Math.random() * 0.4), y: H * (0.5 + Math.random() * 0.2),
     });
   }
@@ -213,7 +214,7 @@ export class Deck {
     const y = clamp(door.y - door.ny * (DOOR * 0.6 + 10 + h / 2) - (door.ny ? 0 : DOOR * 0.7), h / 2 + 8, view.H - h / 2 - 8);
     const bg = scene.add.graphics();
     bg.fillStyle(hex(p.color), 1).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
-    const bubble = scene.add.container(x, y, [bg, pic, label]).setDepth(7).setScale(0.6);
+    const bubble = scene.add.container(x, y, [bg, pic, label]).setDepth(9).setScale(0.6);
     scene.tweens.add({ targets: bubble, scale: 1, duration: 160, ease: 'Back.Out' });
     scene.tweens.add({ targets: bubble, alpha: 0, delay: 3500, duration: 500, onComplete: () => bubble.destroy() });
     this.pulse(door.cx, door.cy, hex(p.color));
@@ -349,6 +350,7 @@ export class Deck {
     for (const b of this.portalBits) b.destroy();
     this.portalBits = [];
     this.doors.clear();
+    this.doorSpots = []; // every door drawn (one crewmate can have two)
     for (const { p, t0, t1, door } of this.hidePortals ? [] : portals()) {
       const color = hex(p.color), alpha = p.away ? 0.3 : 1; // a crewmate who dropped out keeps their place, dimmed
       g.fillStyle(color, alpha);
@@ -378,6 +380,7 @@ export class Deck {
       else name.setOrigin(m.nx < 0 ? 0 : 1, 0).setPosition(m.nx < 0 ? inset + 10 : W - inset - 10, cy + DOOR + 5);
       this.portalBits.push(name);
       this.doors.set(p.id, { x: ix, y: iy, cx, cy, nx: m.nx, ny: m.ny });
+      this.doorSpots.push({ cx, cy });
     }
 
     this.status.setPosition(view.safeLeft + 16, Deck.rowY()); // on the planet, at the left

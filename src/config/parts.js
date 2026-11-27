@@ -12,4 +12,18 @@ export const PARTS = [
   { icon: 'medicine', name: 'Medicine', fault: 'Sick crewmate' },
   { icon: 'key', name: 'Key', fault: 'Jammed door' },
   { icon: 'flat', name: 'Flat battery', fault: null },
+  { icon: 'fuse', name: 'Fuse', fault: 'Short circuit' },
+  { icon: 'airtank', name: 'Air tank', fault: 'Air leak' },
+  { icon: 'mop', name: 'Mop', fault: 'Spill' },
+  { icon: 'fuel', name: 'Fuel', fault: 'Empty tank' },
+  { icon: 'antenna', name: 'Antenna', fault: 'Radio silence' },
+  { icon: 'cog', name: 'Cog', fault: 'Stalled engine' },
+  { icon: 'plunger', name: 'Plunger', fault: 'Blocked toilet' },
+  { icon: 'coffee', name: 'Coffee', fault: 'Sleepy pilot' },
+  { icon: 'coldpatch', name: 'Cold patch', fault: null },
+  { icon: 'can', name: 'Empty can', fault: null },
+  { icon: 'goose', name: 'Goose', fault: null },
 ];
+// The parts that fix something as they are (positions in the list above).
+export const FIXERS = PARTS.map((p, i) => (p.fault ? i : -1)).filter((i) => i >= 0);
+export const GOOSE = 19; // not a part at all: a loose goose, to be dropped on the airlock

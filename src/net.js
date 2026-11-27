@@ -4,7 +4,7 @@
 //   'left'    I'm no longer in a crew
 //   'error'   joining failed: 'nocrew' (no crew has that code) or 'full'
 //   'room'    the crew or the edge-mapping mode changed
-//   'game'    the ship changed (message has .ev: brief, launch, fault, burst, fixed, lost, won, over, end)
+//   'game'    the ship changed (message has .ev: brief, launch, fault, burst, fixed, lost, won, over, end, warn, swap, goose, peck)
 //   'throw'   a part is arriving from another phone
 //   'spawn'   the server put a new part in my room
 //   'bounce'  a part I threw had nowhere to go and came back
@@ -16,7 +16,7 @@ import { RELAY } from './config/settings.js';
 
 export const net = new Phaser.Events.EventEmitter();
 
-const freshGame = () => ({ phase: 'lobby', hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], level: null });
+const freshGame = () => ({ phase: 'lobby', hull: 100, score: 0, goal: 0, stars: 0, faults: [], stations: [], geese: [], shift: 0, level: null });
 
 export const state = {
   online: false,
